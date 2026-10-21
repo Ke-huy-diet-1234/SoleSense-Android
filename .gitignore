@@ -1,0 +1,23 @@
+# Gradle build outputs
+.gradle/
+build/
+/*/build/
+app/build/
+
+# IDE files (Android Studio / IntelliJ)
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Local configuration (chứa SDK location và API Keys cá nhân)
+local.properties
+
+# Android Studio logs & captures
+/captures
+.externalNativeBuild
+.cxx/
+
+# OS generated files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">SoleSense</string>
+    <string name="title_activity_main2">MainActivity2</string>
+
+    <string name="welcome_title">Chào mừng đến với 👋</string>
+    <string name="welcome_brand">SoleSense</string>
+    <string name="welcome_description">Khám phá bộ sưu tập giày đỉnh cao dành\nriêng cho bước chân mỗi ngày của bạn</string>
+    <string name="onboarding_style_title">Phong cách đỉnh cao, thoải mái trong từng chuyển động</string>
+    <string name="onboarding_comfort_title">Sự hài lòng của bạn là ưu tiên hàng đầu của chúng tôi</string>
+    <string name="onboarding_confidence_title">Khẳng định phong cách, tự tin sải bước cùng SoleSense ngay hôm nay!</string>
+    <string name="next">Next</string>
+    <string name="title_activity_welcome_screen">WelcomeScreen</string>
+</resources>

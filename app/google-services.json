@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "709271649676",
+    "project_id": "sneakerai-b4f26",
+    "storage_bucket": "sneakerai-b4f26.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:709271649676:android:17f3e9d34c2a25a13ceaa9",
+        "android_client_info": {
+          "package_name": "com.example.solesense"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCkAvqHMkm-Fg-troWX1xwPDbCR1P8_sXc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
