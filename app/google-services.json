@@ -12,7 +12,20 @@
           "package_name": "com.example.solesense"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "709271649676-hmaru4ded3kp6jn5tmrva06l0qak486g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.solesense",
+            "certificate_hash": "334f0f3aceaeb320053e8d308f5385157fc60671"
+          }
+        },
+        {
+          "client_id": "709271649676-95dosmcpiqjdtimt2m8gt40vgh9gjj77.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCkAvqHMkm-Fg-troWX1xwPDbCR1P8_sXc"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "709271649676-95dosmcpiqjdtimt2m8gt40vgh9gjj77.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

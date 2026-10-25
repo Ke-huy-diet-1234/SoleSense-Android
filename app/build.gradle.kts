@@ -3,6 +3,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.services)
     alias(libs.plugins.kotlin.android)
+
+
 }
 
 android {
@@ -24,7 +26,7 @@ android {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
             )
         }
     }
@@ -43,7 +45,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>().configureEa
 
 dependencies {
     implementation(libs.androidx.appcompat)
-    implementation(libs.core.ktx)
+    implementation(libs.androidx.core.ktx)
     implementation(libs.material)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -57,7 +59,6 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
@@ -66,4 +67,18 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:35.0.2"))
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-analytics")
+
+    // Firebase Auth
+    implementation("com.google.firebase:firebase-auth")
+    // Facebook SDK
+    implementation("com.facebook.android:facebook-login:16.3.0")
+
+    // Google Credential Manager
+    implementation("androidx.credentials:credentials:1.2.1")
+    implementation("androidx.credentials:credentials-play-services-auth:1.2.1")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.0")
+
+    // ViewModel Compose (cung cấp hàm viewModel())
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
+
 }
