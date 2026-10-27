@@ -1,4 +1,4 @@
-package com.example.solesense.ui.auth
+package com.example.solesense.ui.onboarding
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background

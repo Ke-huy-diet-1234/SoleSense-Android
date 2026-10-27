@@ -10,4 +10,8 @@
     <string name="onboarding_confidence_title">Khẳng định phong cách, tự tin sải bước cùng SoleSense ngay hôm nay!</string>
     <string name="next">Next</string>
     <string name="title_activity_welcome_screen">WelcomeScreen</string>
+
+    <string name="facebook_app_id">1750811866003713</string>
+    <string name="fb_login_protocol_scheme">fb1750811866003713</string>
+    <string name="facebook_client_token">3c7e8eac1b051ad30f02e8146d3ef00a</string>
 </resources>

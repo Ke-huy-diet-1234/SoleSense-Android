@@ -1,4 +1,4 @@
-package com.example.solesense.ui.auth
+package com.example.solesense.ui.onboarding
 
 
 import androidx.compose.runtime.Composable
@@ -22,10 +22,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.solesense.R
-import com.example.solesense.ui.theme.SoleSenseTheme
 import kotlinx.coroutines.launch
 
 data class OnboardingData(val imageRes: Int, val title: String)
@@ -51,7 +49,6 @@ fun OnboardingScreen(onComplete: () -> Unit, modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Ảnh bo góc phía dưới theo UI mới
                 Image(
                     painter = painterResource(id = pages[position].imageRes),
                     contentDescription = null,
