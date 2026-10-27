@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.solesense.model.user.User
 import com.example.solesense.repository.AuthRepositoryImpl
+import com.facebook.AccessToken
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -56,6 +57,21 @@ class AuthViewModel(
                 Log.e(TAG, "Lỗi đăng nhập Firebase", result.exceptionOrNull())
                 _authState.value = AuthState.Error(errorMsg)
                 onError?.invoke(errorMsg)
+            }
+        }
+    }
+
+    fun signInWithFacebook(
+        accessToken: AccessToken,
+        onSuccess: (User) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = authRepository.authWithFacebook(accessToken)
+            if (result.isSuccess) {
+                result.getOrNull()?.let(onSuccess)
+            } else {
+                onError(result.exceptionOrNull()?.message ?: "Lỗi đăng nhập bằng Facebook")
             }
         }
     }

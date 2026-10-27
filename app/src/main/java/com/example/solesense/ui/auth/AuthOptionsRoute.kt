@@ -2,7 +2,9 @@ package com.example.solesense.ui.auth
 
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
@@ -13,6 +15,11 @@ import androidx.credentials.exceptions.NoCredentialException
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.solesense.model.user.User
 import com.example.solesense.viewmodel.AuthViewModel
+import com.facebook.CallbackManager
+import com.facebook.FacebookCallback
+import com.facebook.FacebookException
+import com.facebook.login.LoginManager
+import com.facebook.login.LoginResult
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import kotlinx.coroutines.launch
@@ -33,6 +40,48 @@ fun AuthOptionsRoute(
     val coroutineScope = rememberCoroutineScope()
     val credentialManager = remember { CredentialManager.create(context) }
 
+
+    // BẮT ĐẦU PHẦN CỦA FACEBOOK
+    val callbackManager = remember { CallbackManager.Factory.create() }
+    val loginManager = remember { LoginManager.getInstance() }
+
+    // Launcher mở màn hình uỷ quyền FB mà không cần đụng vào MainActivity
+    val facebookLoginLauncher = rememberLauncherForActivityResult(
+        contract = loginManager.createLogInActivityResultContract(callbackManager, null)
+    ) { /* Kết quả sẽ được đẩy tự động vào CallbackManager bên dưới */ }
+
+
+    DisposableEffect(Unit) {
+        loginManager.registerCallback(callbackManager, object : FacebookCallback<LoginResult> {
+            override fun onSuccess(result: LoginResult) {
+                Log.d(TAG, "Lấy AccessToken FB thành công: ${result.accessToken.token}")
+                viewModel.signInWithFacebook(
+                    accessToken = result.accessToken,
+                    onSuccess = { user ->
+                        Toast.makeText(context, "Đăng nhập thành công! Xin chào ${user.fullName}", Toast.LENGTH_SHORT).show()
+                        onLoginSuccess?.invoke(user)
+                    },
+                    onError = { error ->
+                        Toast.makeText(context, "Lỗi Firebase FB: $error", Toast.LENGTH_SHORT).show()
+                        Log.e(TAG,"Lỗi Firebase FB: $error" )
+                    }
+                )
+            }
+
+            override fun onCancel() {
+                Log.d(TAG, "Người dùng đã huỷ chọn tài khoản Facebook")
+            }
+
+            override fun onError(error: FacebookException) {
+                Log.e(TAG, "Lỗi Facebook Login", error)
+                Toast.makeText(context, "Lỗi FB: ${error.message}", Toast.LENGTH_SHORT).show()
+            }
+        })
+        onDispose {
+            loginManager.unregisterCallback(callbackManager)
+        }
+    }
+
     AuthOptionsScreen(
         onBackClick = onBack,
         onPasswordLoginClick = onNavigateToLogin,
@@ -40,25 +89,27 @@ fun AuthOptionsRoute(
         onGoogleClick = {
             coroutineScope.launch {
                 try {
-                    val googleIdOption = GetGoogleIdOption.Builder()
-                        .setFilterByAuthorizedAccounts(false)
-                        .setServerClientId(SERVER_CLIENT_ID)
-                        .setAutoSelectEnabled(false)
+                    // Sử dụng GetSignInWithGoogleOption cho hành động bấm nút "Tiếp tục với Google"
+                    // để hiển thị hộp thoại chọn tài khoản Google (Bottom Sheet Account Chooser với avatar, tên, email)
+                    val signInWithGoogleOption = GetSignInWithGoogleOption.Builder(SERVER_CLIENT_ID)
                         .build()
 
                     val request = GetCredentialRequest.Builder()
-                        .addCredentialOption(googleIdOption)
+                        .addCredentialOption(signInWithGoogleOption)
                         .build()
 
                     Log.d(TAG, "Bắt đầu gọi credentialManager.getCredential...")
                     val result = try {
                         credentialManager.getCredential(context, request)
                     } catch (e: NoCredentialException) {
-                        Log.w(TAG, "GetGoogleIdOption trả về NoCredentialException, thử fallback GetSignInWithGoogleOption...", e)
-                        val signInWithGoogleOption = GetSignInWithGoogleOption.Builder(SERVER_CLIENT_ID)
+                        Log.w(TAG, "GetSignInWithGoogleOption trả về NoCredentialException, thử fallback GetGoogleIdOption...", e)
+                        val googleIdOption = GetGoogleIdOption.Builder()
+                            .setFilterByAuthorizedAccounts(false)
+                            .setServerClientId(SERVER_CLIENT_ID)
+                            .setAutoSelectEnabled(false)
                             .build()
                         val fallbackRequest = GetCredentialRequest.Builder()
-                            .addCredentialOption(signInWithGoogleOption)
+                            .addCredentialOption(googleIdOption)
                             .build()
                         credentialManager.getCredential(context, fallbackRequest)
                     }
@@ -103,7 +154,10 @@ fun AuthOptionsRoute(
             }
         },
         onFacebookClick = {
-            // Sẽ làm ở bước sau
+            loginManager.logOut()
+            loginManager.setAuthType("reauthenticate")
+            loginManager.setLoginBehavior(com.facebook.login.LoginBehavior.WEB_ONLY)
+            facebookLoginLauncher.launch(listOf("email", "public_profile"))
         }
     )
 }
