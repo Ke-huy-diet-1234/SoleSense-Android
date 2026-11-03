@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.example.solesense.ui.auth.AuthOptionsRoute // Bắt buộc import Route thay vì Screen
+import com.example.solesense.ui.navigation.MainScreen
 import com.example.solesense.ui.onboarding.OnboardingScreen
 import com.example.solesense.ui.theme.SoleSenseTheme
 import com.google.android.gms.common.wrappers.Wrappers.packageManager
@@ -38,21 +39,18 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-
-
-
         setContent {
             SoleSenseTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    MainAppNavigation(
-                        // Xóa các Toast giả lập của Google/Facebook vì Route đã tự xử lý
-                        onPasswordLogin = {
-                            Toast.makeText(this, "Đăng nhập bằng Mật khẩu", Toast.LENGTH_SHORT).show()
-                        },
-                        onRegister = {
-                            Toast.makeText(this, "Chuyển đến màn Đăng ký", Toast.LENGTH_SHORT).show()
-                        },
-                    )
+                    MainScreen()
+//                    MainAppNavigation(
+//                        onPasswordLogin = {
+//                            Toast.makeText(this, "Đăng nhập bằng Mật khẩu", Toast.LENGTH_SHORT).show()
+//                        },
+//                        onRegister = {
+//                            Toast.makeText(this, "Chuyển đến màn Đăng ký", Toast.LENGTH_SHORT).show()
+//                        },
+//                    )
                 }
             }
         }
