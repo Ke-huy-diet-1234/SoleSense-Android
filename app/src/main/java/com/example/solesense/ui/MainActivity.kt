@@ -22,9 +22,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.solesense.ui.auth.AuthOptionsRoute // Bắt buộc import Route thay vì Screen
+import com.example.solesense.ui.checkout.CheckoutScreen
 import com.example.solesense.ui.navigation.MainScreen
 import com.example.solesense.ui.onboarding.OnboardingScreen
+import com.example.solesense.ui.product.ProductDetailScreen
+import com.example.solesense.ui.product.ProductDetailViewModel
 import com.example.solesense.ui.theme.SoleSenseTheme
 import com.google.android.gms.common.wrappers.Wrappers.packageManager
 import java.security.MessageDigest
@@ -43,61 +48,54 @@ class MainActivity : AppCompatActivity() {
             SoleSenseTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     MainScreen()
-//                    MainAppNavigation(
-//                        onPasswordLogin = {
-//                            Toast.makeText(this, "Đăng nhập bằng Mật khẩu", Toast.LENGTH_SHORT).show()
-//                        },
-//                        onRegister = {
-//                            Toast.makeText(this, "Chuyển đến màn Đăng ký", Toast.LENGTH_SHORT).show()
-//                        },
-//                    )
                 }
             }
         }
     }
-}
 
-@Composable
-fun MainAppNavigation(
-    onPasswordLogin: () -> Unit = {},
-    onRegister: () -> Unit = {},
-) {
-    var currentScreen by remember { mutableStateOf(AppScreen.ONBOARDING) }
+    @Composable
+    fun MainAppNavigation(
+        onPasswordLogin: () -> Unit = {},
+        onRegister: () -> Unit = {},
+    ) {
+        var currentScreen by remember { mutableStateOf(AppScreen.ONBOARDING) }
 
-    // Xử lý nút Back của thiết bị khi đang ở AuthOptions
-    BackHandler(enabled = currentScreen == AppScreen.AUTH_OPTIONS) {
-        currentScreen = AppScreen.ONBOARDING
-    }
+        // Xử lý nút Back của thiết bị khi đang ở AuthOptions
+        BackHandler(enabled = currentScreen == AppScreen.AUTH_OPTIONS) {
+            currentScreen = AppScreen.ONBOARDING
+        }
 
-    AnimatedContent(
-        targetState = currentScreen,
-        transitionSpec = {
-            if (targetState == AppScreen.AUTH_OPTIONS) {
-                (slideInHorizontally { width -> width } + fadeIn()) togetherWith
-                        (slideOutHorizontally { width -> -width } + fadeOut())
-            } else {
-                (slideInHorizontally { width -> -width } + fadeIn()) togetherWith
-                        (slideOutHorizontally { width -> width } + fadeOut())
-            }
-        },
-        label = "ScreenTransition",
-    ) { screen ->
-        when (screen) {
-            AppScreen.ONBOARDING -> {
-                OnboardingScreen(
-                    onComplete = {
-                        currentScreen = AppScreen.AUTH_OPTIONS
-                    },
-                )
-            }
-            AppScreen.AUTH_OPTIONS -> {
-                AuthOptionsRoute(
-                    onBack = {
-                        currentScreen = AppScreen.ONBOARDING
-                    },
-                    onNavigateToLogin = onPasswordLogin,
-                    onNavigateToRegister = onRegister
-                )
+        AnimatedContent(
+            targetState = currentScreen,
+            transitionSpec = {
+                if (targetState == AppScreen.AUTH_OPTIONS) {
+                    (slideInHorizontally { width -> width } + fadeIn()) togetherWith
+                            (slideOutHorizontally { width -> -width } + fadeOut())
+                } else {
+                    (slideInHorizontally { width -> -width } + fadeIn()) togetherWith
+                            (slideOutHorizontally { width -> width } + fadeOut())
+                }
+            },
+            label = "ScreenTransition",
+        ) { screen ->
+            when (screen) {
+                AppScreen.ONBOARDING -> {
+                    OnboardingScreen(
+                        onComplete = {
+                            currentScreen = AppScreen.AUTH_OPTIONS
+                        },
+                    )
+                }
+
+                AppScreen.AUTH_OPTIONS -> {
+                    AuthOptionsRoute(
+                        onBack = {
+                            currentScreen = AppScreen.ONBOARDING
+                        },
+                        onNavigateToLogin = onPasswordLogin,
+                        onNavigateToRegister = onRegister
+                    )
+                }
             }
         }
     }

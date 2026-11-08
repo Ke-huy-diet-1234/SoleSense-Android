@@ -16,7 +16,8 @@ import com.example.solesense.ui.components.ProductCard
 
 fun LazyGridScope.recommendedSection(
     products: List<ProductModel>,
-    onFavoriteClick: (ProductModel) -> Unit
+    onFavoriteClick: (ProductModel) -> Unit,
+    onProductClick: (ProductModel) -> Unit = {}
 ) {
     // Tiêu đề Section (Chiếm trọn 2 cột)
     item(span = { GridItemSpan(2) }) {
@@ -35,7 +36,8 @@ fun LazyGridScope.recommendedSection(
     items(products, key = { it.id }) { product ->
         ProductCard(
             product = product,
-            onFavoriteClick = { onFavoriteClick(product) }
+            onFavoriteClick = { onFavoriteClick(product) },
+            onProductClick = { onProductClick(product) }
         )
     }
 }

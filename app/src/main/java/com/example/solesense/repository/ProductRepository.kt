@@ -1,6 +1,7 @@
 package com.example.solesense.data.repository
 
 import com.example.solesense.model.catalog.Product
+import com.example.solesense.model.catalog.Variant
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.Source
@@ -37,6 +38,36 @@ class ProductRepository {
 
             val products = snapshot.toObjects(Product::class.java)
             Result.success(products)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // Lấy chi tiết 1 sản phẩm theo ID
+    suspend fun getProductById(productId: String): Result<Product> {
+        return try {
+            val doc = db.collection("products")
+                .document(productId)
+                .get()
+                .await()
+            val product = doc.toObject(Product::class.java)
+                ?: throw IllegalArgumentException("Không tìm thấy sản phẩm")
+            Result.success(product)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // Lấy danh sách biến thể (variants) của sản phẩm từ subcollection products/{productId}/variants
+    suspend fun getVariantsByProductId(productId: String): Result<List<Variant>> {
+        return try {
+            val snapshot = db.collection("products")
+                .document(productId)
+                .collection("variants")
+                .get()
+                .await()
+            val variants = snapshot.toObjects(Variant::class.java)
+            Result.success(variants)
         } catch (e: Exception) {
             Result.failure(e)
         }

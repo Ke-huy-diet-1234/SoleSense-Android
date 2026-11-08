@@ -22,36 +22,58 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-// Import 5 màn hình rỗng
+import androidx.navigation.navArgument
 import com.example.solesense.ui.cart.CartScreen
 import com.example.solesense.ui.chat.ChatScreen
+import com.example.solesense.ui.checkout.CheckoutScreen
 import com.example.solesense.ui.explore.ExploreScreen
 import com.example.solesense.ui.home.HomeScreen
+import com.example.solesense.ui.product.ProductDetailScreen
+import com.example.solesense.ui.product.ProductDetailViewModel
 import com.example.solesense.ui.profile.ProfileScreen
 
 @Composable
 fun MainScreen() {
     // 1. Khởi tạo Controller - Bộ não quản lý toàn bộ luồng điều hướng
     val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
 
-    // 2. Cấu trúc Scaffold tạo vỏ bọc giao diện chuẩn
+    val bottomBarRoutes = setOf(
+        Screen.Home.route,
+        Screen.Explore.route,
+        Screen.Cart.route,
+        Screen.Chat.route,
+        Screen.Profile.route
+    )
+
+    // 2. Cấu trúc Scaffold tạo vỏ bọc giao diện chuẩn (ẩn BottomNav khi vào màn Chi tiết sản phẩm hoặc Thanh toán)
     Scaffold(
         bottomBar = {
-            AppBottomNavigationBar(navController = navController)
+            if (currentRoute in bottomBarRoutes) {
+                AppBottomNavigationBar(navController = navController)
+            }
         }
     ) { innerPadding ->
         // 3. Vùng chứa nội dung (AppNavHost)
-        // Modifier.padding(innerPadding) cực kỳ quan trọng: nó đẩy nội dung lên trên BottomNav
+        val contentModifier = if (currentRoute in bottomBarRoutes) {
+            Modifier.padding(innerPadding)
+        } else {
+            Modifier
+        }
+
         AppNavHost(
             navController = navController,
-            modifier = Modifier.padding(innerPadding)
+            modifier = contentModifier
         )
     }
 }
@@ -134,10 +156,67 @@ fun AppNavHost(navController: NavHostController, modifier: Modifier = Modifier) 
         startDestination = Screen.Home.route,
         modifier = modifier
     ) {
-        composable(Screen.Home.route) { HomeScreen({},{}) }
+        composable(Screen.Home.route) {
+            HomeScreen(
+                onNavigateToExplore = {
+                    navController.navigate(Screen.Explore.route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onNavigateToLogin = {},
+                onProductClick = { productId ->
+                    navController.navigate("product_detail/$productId")
+                }
+            )
+        }
         composable(Screen.Explore.route) { ExploreScreen() }
         composable(Screen.Cart.route) { CartScreen() }
         composable(Screen.Chat.route) { ChatScreen() }
         composable(Screen.Profile.route) { ProfileScreen() }
+
+        composable(
+            route = "product_detail/{productId}",
+            arguments = listOf(navArgument("productId") { type = NavType.StringType })
+        ) {
+            val detailViewModel: ProductDetailViewModel = viewModel()
+            ProductDetailScreen(
+                viewModel = detailViewModel,
+                onBackClick = { navController.popBackStack() },
+                onCartClick = {
+                    navController.navigate(Screen.Cart.route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onSearchClick = {
+                    navController.navigate(Screen.Explore.route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onNavigateToCheckout = { _ ->
+                    navController.navigate("checkout")
+                }
+            )
+        }
+
+        composable(route = "checkout") {
+            CheckoutScreen(
+                onBackClick = { navController.popBackStack() },
+                onOrderSuccess = {
+                    navController.popBackStack(Screen.Home.route, inclusive = false)
+                }
+            )
+        }
     }
 }

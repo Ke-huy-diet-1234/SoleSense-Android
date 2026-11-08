@@ -15,6 +15,7 @@ fun TrendingProductsSection(
     products: List<ProductModel>,
     onSeeAllClick: () -> Unit,
     onFavoriteClick: (ProductModel) -> Unit,
+    onProductClick: (ProductModel) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -32,6 +33,7 @@ fun TrendingProductsSection(
                 ProductCard(
                     product = product,
                     onFavoriteClick = { onFavoriteClick(product) },
+                    onProductClick = { onProductClick(product) },
                     modifier = Modifier.width(160.dp)
                 )
             }

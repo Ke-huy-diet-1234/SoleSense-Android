@@ -49,6 +49,7 @@ import com.example.solesense.ui.home.components.recommendedSection
 fun HomeScreen(
     onNavigateToExplore: () -> Unit,
     onNavigateToLogin: () -> Unit = {},
+    onProductClick: (String) -> Unit = {},
     viewModel: HomeViewModel = viewModel(),
     modifier: Modifier = Modifier
 ) {
@@ -100,7 +101,8 @@ fun HomeScreen(
                         newArrivals = state.newArrivals,
                         recommendedProducts = state.recommendedProducts,
                         onNavigateToExplore = onNavigateToExplore,
-                        onNavigateToLogin = onNavigateToLogin
+                        onNavigateToLogin = onNavigateToLogin,
+                        onProductClick = onProductClick
                     )
                 }
             }
@@ -116,6 +118,7 @@ fun HomeScreenContent(
     recommendedProducts: List<ProductModel>,
     onNavigateToExplore: () -> Unit,
     onNavigateToLogin: () -> Unit,
+    onProductClick: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val isLoggedIn by remember { mutableStateOf(false) }
@@ -176,7 +179,8 @@ fun HomeScreenContent(
             TrendingProductsSection(
                 products = trendingProducts,
                 onSeeAllClick = onNavigateToExplore,
-                onFavoriteClick = {}
+                onFavoriteClick = {},
+                onProductClick = { product -> onProductClick(product.id) }
             )
         }
 
@@ -185,14 +189,16 @@ fun HomeScreenContent(
             NewArrivalsSection(
                 products = newArrivals,
                 onSeeAllClick = onNavigateToExplore,
-                onFavoriteClick = {}
+                onFavoriteClick = {},
+                onProductClick = { product -> onProductClick(product.id) }
             )
         }
 
         // 6. RecommendedSection
         recommendedSection(
             products = recommendedProducts,
-            onFavoriteClick = {}
+            onFavoriteClick = {},
+            onProductClick = { product -> onProductClick(product.id) }
         )
     }
 }

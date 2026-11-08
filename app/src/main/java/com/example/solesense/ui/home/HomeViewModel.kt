@@ -7,6 +7,8 @@ import com.example.solesense.data.repository.ProductRepository
 import com.example.solesense.model.catalog.Brand
 import com.example.solesense.model.catalog.ProductModel
 import com.example.solesense.repository.BrandRepository
+import com.example.solesense.repository.VoucherRepository
+import com.example.solesense.utils.DatabaseSeeder
 import com.example.solesense.utils.NetworkConnectivityObserver
 import com.example.solesense.utils.toProductModel
 import kotlinx.coroutines.async
@@ -55,6 +57,12 @@ class HomeViewModel @JvmOverloads constructor(
                 _isRefreshing.value = true
             } else if (_uiState.value !is HomeUiState.Success) {
                 _uiState.value = HomeUiState.Loading
+            }
+
+            val vouchersCheck = VoucherRepository().getActiveVouchers().getOrDefault(emptyList())
+            if (vouchersCheck.isEmpty()) {
+                // Tự động khởi tạo các bảng còn thiếu (categories, vouchers, addresses, favorites, variants price) lên Firestore
+                DatabaseSeeder().seedMockDataToFirestore()
             }
 
             val productsDeferred = async { repository.getProducts(isForceRefresh = isForceRefresh) }
