@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.solesense.model.user.User
 import com.example.solesense.repository.AuthRepositoryImpl
+import com.example.solesense.utils.UserSessionManager
 import com.facebook.AccessToken
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -44,6 +45,7 @@ class AuthViewModel(
                 val user = result.getOrNull()
                 if (user != null) {
                     Log.d(TAG, "Đăng nhập thành công: ${user.fullName} - Role: ${user.role} - UID: ${user.userId}")
+                    UserSessionManager.onLoginSuccess(user)
                     _authState.value = AuthState.Success(user)
                     onSuccess?.invoke(user)
                 } else {
@@ -67,12 +69,70 @@ class AuthViewModel(
         onError: (String) -> Unit
     ) {
         viewModelScope.launch {
+            _authState.value = AuthState.Loading
             val result = authRepository.authWithFacebook(accessToken)
             if (result.isSuccess) {
-                result.getOrNull()?.let(onSuccess)
+                val user = result.getOrNull()
+                if (user != null) {
+                    UserSessionManager.onLoginSuccess(user)
+                    _authState.value = AuthState.Success(user)
+                    onSuccess(user)
+                }
             } else {
-                onError(result.exceptionOrNull()?.message ?: "Lỗi đăng nhập bằng Facebook")
+                val errorMsg = result.exceptionOrNull()?.message ?: "Lỗi đăng nhập bằng Facebook"
+                _authState.value = AuthState.Error(errorMsg)
+                onError(errorMsg)
             }
+        }
+    }
+
+    fun signInWithEmailPassword(
+        email: String,
+        password: String,
+        onSuccess: (User) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _authState.value = AuthState.Loading
+            val result = authRepository.signInWithEmailPassword(email, password)
+            result.fold(
+                onSuccess = { user ->
+                    UserSessionManager.onLoginSuccess(user)
+                    _authState.value = AuthState.Success(user)
+                    onSuccess(user)
+                },
+                onFailure = { e ->
+                    val errorMsg = e.localizedMessage ?: "Email hoặc mật khẩu không chính xác"
+                    _authState.value = AuthState.Error(errorMsg)
+                    onError(errorMsg)
+                }
+            )
+        }
+    }
+
+    fun registerWithEmailPassword(
+        fullName: String,
+        email: String,
+        phone: String,
+        password: String,
+        onSuccess: (User) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            _authState.value = AuthState.Loading
+            val result = authRepository.registerWithEmailPassword(fullName, email, phone, password)
+            result.fold(
+                onSuccess = { user ->
+                    UserSessionManager.onLoginSuccess(user)
+                    _authState.value = AuthState.Success(user)
+                    onSuccess(user)
+                },
+                onFailure = { e ->
+                    val errorMsg = e.localizedMessage ?: "Đăng ký tài khoản thất bại"
+                    _authState.value = AuthState.Error(errorMsg)
+                    onError(errorMsg)
+                }
+            )
         }
     }
 

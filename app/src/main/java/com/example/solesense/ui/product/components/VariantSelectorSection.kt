@@ -36,6 +36,7 @@ fun VariantSelectorSection(
     selectedSizeName: String?,
     onColorSelected: (String) -> Unit,
     onSizeSelected: (String) -> Unit,
+    onSizeGuideClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -82,8 +83,15 @@ fun VariantSelectorSection(
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "Hướng dẫn chọn kích cỡ >",
-                style = MaterialTheme.typography.bodySmall.copy(color = Color.Gray),
-                maxLines = 1
+                style = MaterialTheme.typography.bodySmall.copy(
+                    color = Color(0xFF616161),
+                    fontWeight = FontWeight.Medium
+                ),
+                maxLines = 1,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable { onSizeGuideClick() }
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
             )
         }
 

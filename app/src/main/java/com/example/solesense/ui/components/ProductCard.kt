@@ -1,19 +1,18 @@
 package com.example.solesense.ui.components
 
-import android.R.attr.contentDescription
-import android.R.attr.fontWeight
-import android.R.attr.maxLines
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,10 +25,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import coil.compose.AsyncImagePainter.State.Empty.painter
+import com.example.solesense.R
 import com.example.solesense.model.catalog.ProductBadge
 import com.example.solesense.model.catalog.ProductModel
-import com.example.solesense.R
+import com.example.solesense.repository.FavoriteRepository
 
 @Composable
 fun ProductCard(
@@ -38,6 +37,9 @@ fun ProductCard(
     onProductClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val favoriteIds by FavoriteRepository.favoriteProductIds.collectAsState()
+    val isFavorite = favoriteIds.contains(product.id)
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -70,7 +72,7 @@ fun ProductCard(
                         ProductBadge.BESTSELLER -> Triple("BESTSELLER", Color(0xFFFF8A00), R.drawable.ic_crown)
                         ProductBadge.NEW -> Triple("NEW", Color(0xFF00B14F), null)
                         ProductBadge.SALE -> Triple("SALE", Color(0xFFE74C3C), null)
-                        else -> Triple("", Color.Transparent, null)
+                        ProductBadge.NONE -> Triple("", Color.Transparent, null)
                     }
 
                     Row(
@@ -82,7 +84,7 @@ fun ProductCard(
                     ) {
                         if (icon != null) {
                             Icon(
-                               painterResource(icon),
+                                painterResource(icon),
                                 contentDescription = null,
                                 tint = Color.White,
                                 modifier = Modifier.size(10.dp)
@@ -98,22 +100,22 @@ fun ProductCard(
                     }
                 }
 
-                // Nút Trái tim thả thích (Góc phải trên)
+                // Nút Trái tim Yêu thích (Đổi màu đỏ khi đã thích, ấn lại để bỏ yêu thích)
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(8.dp)
                         .size(28.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF1E1E1E))
+                        .background(if (isFavorite) Color(0xFFFFEBEE) else Color(0xFF1E1E1E))
                         .clickable { onFavoriteClick() },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.FavoriteBorder,
+                        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                         contentDescription = "Favorite",
-                        tint = Color.White,
-                        modifier = Modifier.size(14.dp)
+                        tint = if (isFavorite) Color(0xFFE53935) else Color.White,
+                        modifier = Modifier.size(15.dp)
                     )
                 }
 
@@ -132,7 +134,7 @@ fun ProductCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                           painter = painterResource(R.drawable.ic_package),
+                            painter = painterResource(R.drawable.ic_package),
                             contentDescription = null,
                             tint = Color.White,
                             modifier = Modifier.size(16.dp)
@@ -210,7 +212,7 @@ fun ProductCard(
                 if (product.originalPrice != null && product.badge == ProductBadge.SALE && !product.isOutOfStock) {
                     Text(
                         text = "${formatCurrencyVND(product.originalPrice)} đ",
-                        modifier= Modifier.padding(horizontal = 2.5.dp),
+                        modifier = Modifier.padding(horizontal = 2.5.dp),
                         style = MaterialTheme.typography.bodySmall.copy(
                             textDecoration = TextDecoration.LineThrough
                         ),
@@ -224,15 +226,15 @@ fun ProductCard(
 
                 Text(
                     text = "${formatCurrencyVND(product.currentPrice)} đ",
-                    modifier= Modifier.padding(horizontal = 2.5.dp),
+                    modifier = Modifier.padding(horizontal = 2.5.dp),
                     style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.ExtraBold, // Chuyển từ ExtraBold về Bold để chữ 'đ' không bị phình quá bounding box
-                        fontSize = 13.5.sp            // Giảm 1sp để để dành khoảng trống an toàn lề phải
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 13.5.sp
                     ),
                     color = if (product.isOutOfStock) Color.Gray else Color.Black,
                     maxLines = 1,
-                    softWrap = false,                 // Bắt buộc: Tắt tự động xuống dòng làm vỡ khung
-                    overflow = TextOverflow.Clip      // Bắt buộc: Không cho Ellipsis can thiệp làm xén nét chữ 'đ'
+                    softWrap = false,
+                    overflow = TextOverflow.Clip
                 )
             }
         }

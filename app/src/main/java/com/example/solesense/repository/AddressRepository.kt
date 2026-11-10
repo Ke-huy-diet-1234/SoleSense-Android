@@ -22,7 +22,10 @@ class AddressRepository {
                 .get()
                 .await()
             val addresses = snapshot.toObjects(Address::class.java)
-                .sortedByDescending { it.isDefault }
+                .sortedWith(
+                    compareByDescending<Address> { it.isDefault }
+                        .thenByDescending { it.updatedAt.seconds }
+                )
             Result.success(addresses)
         } catch (e: Exception) {
             Result.failure(e)
@@ -39,27 +42,85 @@ class AddressRepository {
         }
     }
 
+    /**
+     * Tạo mới hoặc cập nhật địa chỉ trên Firebase.
+     * Nếu địa chỉ này được đặt làm mặc định (isDefault = true), tự động cập nhật
+     * địa chỉ mặc định trước đó trên Firebase thành false và đổi địa chỉ mới này thành true.
+     */
     suspend fun saveAddress(
         address: Address,
         userId: String = getCurrentUserId()
     ): Result<Address> {
         return try {
             val addressesRef = db.collection("users").document(userId).collection("addresses")
+            val existingSnapshot = addressesRef.get().await()
+            val existingAddresses = existingSnapshot.toObjects(Address::class.java)
+
             val docRef = if (address.addressId.isNotBlank()) {
                 addressesRef.document(address.addressId)
             } else {
                 addressesRef.document()
             }
 
+            // Nếu đây là địa chỉ đầu tiên của người dùng thì mặc định gán isDefault = true
+            val shouldBeDefault = address.isDefault || existingAddresses.none { it.addressId != docRef.id }
+
+            val now = Timestamp.now()
             val updatedAddress = address.copy(
                 addressId = docRef.id,
-                updatedAt = Timestamp.now()
+                isDefault = shouldBeDefault,
+                createdAt = if (address.addressId.isBlank()) now else address.createdAt,
+                updatedAt = now
             )
-            docRef.set(updatedAddress).await()
+
+            val batch = db.batch()
+            if (shouldBeDefault) {
+                for (doc in existingSnapshot.documents) {
+                    if (doc.id != docRef.id && doc.getBoolean("isDefault") == true) {
+                        batch.update(doc.reference, mapOf("isDefault" to false, "updatedAt" to now))
+                    }
+                }
+            }
+            batch.set(docRef, updatedAddress)
+            batch.commit().await()
+
             Result.success(updatedAddress)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
-}
 
+    suspend fun deleteAddress(
+        addressId: String,
+        userId: String = getCurrentUserId()
+    ): Result<Unit> {
+        return try {
+            if (addressId.isBlank()) {
+                return Result.failure(IllegalArgumentException("Không tìm thấy mã địa chỉ để xóa"))
+            }
+            val addressesRef = db.collection("users").document(userId).collection("addresses")
+            val docRef = addressesRef.document(addressId)
+            val snapshot = docRef.get().await()
+            val wasDefault = snapshot.getBoolean("isDefault") == true
+
+            docRef.delete().await()
+
+            // Nếu xóa địa chỉ đang là mặc định thì tự động chọn địa chỉ đầu tiên còn lại làm mặc định
+            if (wasDefault) {
+                val remaining = addressesRef.get().await()
+                val firstRemaining = remaining.documents.firstOrNull()
+                if (firstRemaining != null) {
+                    firstRemaining.reference.update(
+                        mapOf(
+                            "isDefault" to true,
+                            "updatedAt" to Timestamp.now()
+                        )
+                    ).await()
+                }
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+}

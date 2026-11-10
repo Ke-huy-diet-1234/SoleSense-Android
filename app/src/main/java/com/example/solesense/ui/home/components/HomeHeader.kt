@@ -1,32 +1,46 @@
 package com.example.solesense.ui.home.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.example.solesense.R
+import com.example.solesense.repository.FavoriteRepository
 
 @Composable
 fun HomeHeader(
     isLoggedIn: Boolean,
     userName: String? = null,
+    avatarUrl: String? = null,
     onLoginClick: () -> Unit,
+    onProfileClick: () -> Unit = {},
     onNotificationClick: () -> Unit,
     onFavoriteClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val favoriteIds by FavoriteRepository.favoriteProductIds.collectAsState()
+    val hasFavorites = isLoggedIn && favoriteIds.isNotEmpty()
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -34,30 +48,50 @@ fun HomeHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 1. CỤM AVATAR + XIN CHÀO (GÓC TRÁI)
+        // 1. CỤM AVATAR + XIN CHÀO (GÓC TRÁI) - Đồng bộ 100% với màn hình Tôi (ProfileScreen)
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.clickable { if (!isLoggedIn) onLoginClick() }
+            modifier = Modifier.clickable {
+                if (isLoggedIn) onProfileClick() else onLoginClick()
+            }
         ) {
-            // Avatar
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(44.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFF0F0F0)),
+                    .background(Color(0xFFF2F2F2)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Person,
-                    contentDescription = "Avatar",
-                    tint = Color.Gray,
-                    modifier = Modifier.size(24.dp)
-                )
+                if (isLoggedIn) {
+                    if (!avatarUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = avatarUrl,
+                            contentDescription = "Avatar",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_solesense_logo),
+                            contentDescription = "SoleSense Avatar",
+                            modifier = Modifier.size(32.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.Person,
+                        contentDescription = "Guest Avatar",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(10.dp))
 
-            // Dòng chữ chào mừng theo trạng thái
             Column {
                 if (isLoggedIn) {
                     Text(
@@ -81,13 +115,13 @@ fun HomeHeader(
                         text = "Đăng nhập/Đăng ký ›",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFFFF5722) // Màu cam nhấn nút Đăng nhập
+                        color = Color(0xFFFF5722)
                     )
                 }
             }
         }
 
-        // 2. CỤM ICON THÔNG BÁO & YÊU THÍCH (GÓC PHẢI)
+        // 2. CỤM ICON THÔNG BÁO & DANH MỤC YÊU THÍCH (GÓC PHẢI)
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onNotificationClick) {
                 Icon(
@@ -98,12 +132,32 @@ fun HomeHeader(
                 )
             }
             IconButton(onClick = onFavoriteClick) {
-                Icon(
-                    imageVector = Icons.Outlined.FavoriteBorder,
-                    contentDescription = "Favorites",
-                    tint = Color.Black,
-                    modifier = Modifier.size(24.dp)
-                )
+                Box(contentAlignment = Alignment.TopEnd) {
+                    Icon(
+                        imageVector = if (hasFavorites) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = "Favorites",
+                        tint = if (hasFavorites) Color(0xFFE53935) else Color.Black,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    if (hasFavorites) {
+                        Box(
+                            modifier = Modifier
+                                .offset(x = 4.dp, y = (-3).dp)
+                                .size(15.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFE53935)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = favoriteIds.size.toString(),
+                                color = Color.White,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                lineHeight = 9.sp
+                            )
+                        }
+                    }
+                }
             }
         }
     }

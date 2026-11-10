@@ -8,6 +8,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -15,7 +16,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.example.solesense.ui.components.LoginRequiredDialog
 import com.example.solesense.ui.product.components.*
+import com.example.solesense.utils.AppAuthSessionState
+import com.example.solesense.utils.UserSessionManager
 
 @Composable
 fun ProductDetailScreen(
@@ -23,12 +27,25 @@ fun ProductDetailScreen(
     onBackClick: () -> Unit,
     onCartClick: () -> Unit,
     onSearchClick: () -> Unit,
-    onNavigateToCheckout: (variantId: String) -> Unit, // Điều hướng sang trang thanh toán
+    onNavigateToCheckout: (variantId: String) -> Unit,
+    onNavigateToAuth: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    // Thu thập trạng thái từ ViewModel một cách an toàn (Lifecycle-aware)
     val uiState by viewModel.uiState.collectAsState()
+    val sessionState by UserSessionManager.sessionState.collectAsState()
     val context = LocalContext.current
+
+    // Tự động tiếp tục thao tác (Thêm vào giỏ / Mua ngay / Yêu thích) ngay khi đăng nhập xong và quay lại ProductDetail!
+    LaunchedEffect(sessionState, uiState.pendingAuthAction) {
+        if (sessionState is AppAuthSessionState.Authenticated && uiState.pendingAuthAction != null) {
+            viewModel.consumeAndExecutePendingAction(
+                onAddedToCart = { msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                },
+                onNavigateToCheckout = onNavigateToCheckout
+            )
+        }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -39,7 +56,7 @@ fun ProductDetailScreen(
                 onBackClick = onBackClick,
                 onSearchClick = onSearchClick,
                 onCartClick = onCartClick,
-                onMenuClick = { /* TODO: Hiện BottomSheet các tùy chọn phụ */ }
+                onMenuClick = {}
             )
         },
         floatingActionButton = {
@@ -48,18 +65,12 @@ fun ProductDetailScreen(
             )
         },
         bottomBar = {
-            // Khóa/Mở nút Mua dựa vào tính hợp lệ của biến thể được chọn
             val isVariantValid = (uiState.selectedVariant?.stock ?: 0) > 0
 
             ProductBottomBar(
                 isBuyEnabled = isVariantValid,
                 onAddToCartClick = {
-                    if (uiState.selectedVariant != null) {
-                        viewModel.openBottomSheet(BottomSheetActionType.ADD_TO_CART)
-                    } else {
-                        // Nếu chưa chọn biến thể, mở bottomsheet để chọn
-                        viewModel.openBottomSheet(BottomSheetActionType.ADD_TO_CART)
-                    }
+                    viewModel.openBottomSheet(BottomSheetActionType.ADD_TO_CART)
                 },
                 onBuyNowClick = {
                     viewModel.openBottomSheet(BottomSheetActionType.BUY_NOW)
@@ -68,7 +79,6 @@ fun ProductDetailScreen(
         }
     ) { paddingValues ->
 
-        // 1. Xử lý trạng thái Loading
         if (uiState.isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Color(0xFFE53935))
@@ -76,7 +86,6 @@ fun ProductDetailScreen(
             return@Scaffold
         }
 
-        // 2. Xử lý trạng thái Lỗi
         if (uiState.errorMessage != null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(text = "Đã xảy ra lỗi: ${uiState.errorMessage}", color = Color.Red)
@@ -84,7 +93,6 @@ fun ProductDetailScreen(
             return@Scaffold
         }
 
-        // 3. Render giao diện chính khi có dữ liệu
         uiState.product?.let { product ->
             LazyColumn(
                 modifier = Modifier
@@ -115,7 +123,6 @@ fun ProductDetailScreen(
                 }
 
                 item {
-                    // Dải phân cách mờ xám
                     Spacer(modifier = Modifier.height(8.dp).fillMaxWidth().background(Color(0xFFF5F5F5)))
                 }
 
@@ -125,8 +132,9 @@ fun ProductDetailScreen(
                         sizes = uiState.availableSizesForSelectedColor,
                         selectedColorName = uiState.selectedColor,
                         selectedSizeName = uiState.selectedSize,
-                        onColorSelected = viewModel::selectColor, // Truyền trực tiếp reference function
-                        onSizeSelected = viewModel::selectSize
+                        onColorSelected = viewModel::selectColor,
+                        onSizeSelected = viewModel::selectSize,
+                        onSizeGuideClick = viewModel::openSizeGuide
                     )
                 }
 
@@ -137,7 +145,7 @@ fun ProductDetailScreen(
                 item {
                     ProductInfoSection(
                         description = product.description.ifEmpty { "Chưa có mô tả sản phẩm." },
-                        features = emptyList() // Truyền list mock data nếu cần test UI gạch đầu dòng
+                        features = emptyList()
                     )
                 }
 
@@ -146,24 +154,22 @@ fun ProductDetailScreen(
                 }
 
                 item {
-                    // Tạm thời truyền mảng rỗng hoặc tạo vài object ReviewUiModel giả lập vào đây
                     ProductReviewSection(
-                        averageRating = 4.8, // Mock data
-                        totalReviews = 120, // Mock data
-                        reviews = emptyList(), // Thay bằng mock data để test UI
-                        onSeeAllClick = { /* Điều hướng sang màn Tất cả đánh giá */ }
+                        averageRating = 4.8,
+                        totalReviews = 120,
+                        reviews = emptyList(),
+                        onSeeAllClick = {}
                     )
                 }
 
                 item {
                     RelatedProductsSection(
-                        products = emptyList(), // uiState.relatedProducts
-                        onProductClick = { /* Điều hướng đè lên màn chi tiết hiện tại bằng ID mới */ }
+                        products = emptyList(),
+                        onProductClick = {}
                     )
                 }
 
                 item {
-                    // Khoảng trống an toàn đẩy nội dung lên trên BottomBar
                     Spacer(modifier = Modifier.height(24.dp))
                 }
             }
@@ -191,21 +197,31 @@ fun ProductDetailScreen(
             onSizeSelected = viewModel::selectSize,
             onIncreaseQuantity = viewModel::increaseQuantity,
             onDecreaseQuantity = viewModel::decreaseQuantity,
+            onSizeGuideClick = viewModel::openSizeGuide,
             onActionClick = {
-                uiState.selectedVariant?.let { variant ->
-                    when (uiState.bottomSheetActionType) {
-                        BottomSheetActionType.ADD_TO_CART -> {
-                            viewModel.addToCart(variant.variantId)
-                            Toast.makeText(context, "Đã thêm vào giỏ hàng", Toast.LENGTH_SHORT).show()
-                        }
-                        BottomSheetActionType.BUY_NOW -> {
-                            if (viewModel.prepareDirectCheckout()) {
-                                onNavigateToCheckout(variant.variantId)
-                            }
-                        }
-                    }
-                }
+                viewModel.handleVariantActionClick(
+                    onAddedToCart = { msg ->
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    },
+                    onNavigateToCheckout = onNavigateToCheckout
+                )
             }
+        )
+
+        // BottomSheet Hướng dẫn chọn cỡ giày (Khách Guest & Customer đều dùng được)
+        SizeGuideBottomSheet(
+            isVisible = uiState.isSizeGuideVisible,
+            onDismissRequest = viewModel::closeSizeGuide
+        )
+
+        // Hộp thoại yêu cầu đăng nhập khi Khách chưa đăng nhập bấm Thêm vào giỏ / Mua ngay / Yêu thích
+        LoginRequiredDialog(
+            isVisible = uiState.isLoginRequiredDialogVisible,
+            onLoginClick = {
+                viewModel.hideLoginDialogKeepPendingAction()
+                onNavigateToAuth()
+            },
+            onDismiss = viewModel::dismissLoginRequiredDialog
         )
 
         // BottomSheet Chat tư vấn khi bấm vào nút FAB bên phải màn hình

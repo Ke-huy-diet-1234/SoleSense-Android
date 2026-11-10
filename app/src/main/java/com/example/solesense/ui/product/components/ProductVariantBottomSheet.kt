@@ -36,6 +36,7 @@ fun ProductVariantBottomSheet(
     onIncreaseQuantity: () -> Unit,
     onDecreaseQuantity: () -> Unit,
     onActionClick: () -> Unit,
+    onSizeGuideClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (!isVisible) return
@@ -89,7 +90,8 @@ fun ProductVariantBottomSheet(
                 // 4. Chọn Kích cỡ
                 VariantSizeSelector(
                     sizes = sizes,
-                    onSizeSelected = onSizeSelected
+                    onSizeSelected = onSizeSelected,
+                    onSizeGuideClick = onSizeGuideClick
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))

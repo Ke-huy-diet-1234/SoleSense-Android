@@ -60,10 +60,12 @@ data class CheckoutUiState(
     val discountAmount: Double = 0.0,
     val totalAmount: Double = 0.0,
 
-    // 8. Phiên thanh toán VietQR (Giữ đơn 5 phút)
+    // 8. Phiên thanh toán VietQR (Giữ đơn 5 phút đồng bộ thời gian thực)
     val activeOrder: Order? = null,
     val activePayment: Payment? = null,
+    val qrExpireAtMillis: Long = 0L,
     val qrRemainingSeconds: Int = 300,
+    val isQrExpired: Boolean = false,
     val isProcessingQrAction: Boolean = false
 )
 

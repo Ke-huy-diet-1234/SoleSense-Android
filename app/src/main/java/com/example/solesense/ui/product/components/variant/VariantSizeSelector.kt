@@ -22,6 +22,7 @@ import com.example.solesense.ui.product.SizeOptionUiModel
 fun VariantSizeSelector(
     sizes: List<SizeOptionUiModel>,
     onSizeSelected: (String) -> Unit,
+    onSizeGuideClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -38,7 +39,14 @@ fun VariantSizeSelector(
             )
             Text(
                 text = "Hướng dẫn chọn kích cỡ >",
-                style = MaterialTheme.typography.bodySmall.copy(color = Color.Gray)
+                style = MaterialTheme.typography.bodySmall.copy(
+                    color = Color(0xFF616161),
+                    fontWeight = FontWeight.Medium
+                ),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable { onSizeGuideClick() }
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
             )
         }
 

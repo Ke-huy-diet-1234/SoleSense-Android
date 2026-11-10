@@ -6,9 +6,12 @@ import androidx.lifecycle.viewModelScope
 import com.example.solesense.data.repository.ProductRepository
 import com.example.solesense.model.catalog.Product
 import com.example.solesense.model.catalog.Variant
+import com.example.solesense.model.order.CartItem
 import com.example.solesense.model.order.OrderItem
+import com.example.solesense.repository.CartRepository
 import com.example.solesense.repository.FavoriteRepository
 import com.example.solesense.ui.checkout.CheckoutSessionHolder
+import com.example.solesense.utils.UserSessionManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +24,7 @@ class ProductDetailViewModel(
 
     private val repository = ProductRepository()
     private val favoriteRepository = FavoriteRepository()
+    private val cartRepository = CartRepository()
 
     private val _uiState = MutableStateFlow(ProductDetailUiState())
     val uiState: StateFlow<ProductDetailUiState> = _uiState.asStateFlow()
@@ -32,10 +36,21 @@ class ProductDetailViewModel(
         } else {
             loadMockData()
         }
+        refreshCartBadge()
+    }
+
+    fun refreshCartBadge() {
+        if (!UserSessionManager.isAuthenticated()) {
+            _uiState.update { it.copy(cartItemCount = 0) }
+            return
+        }
+        viewModelScope.launch {
+            val count = cartRepository.getCartItemCount(UserSessionManager.getActiveUserId())
+            _uiState.update { it.copy(cartItemCount = count) }
+        }
     }
 
     private fun loadMockData() {
-        // 1. Tạo 1 object Product giả
         val mockProduct = Product(
             productId = "p_001",
             name = "Air Jordan 3 Retro",
@@ -43,12 +58,10 @@ class ProductDetailViewModel(
             basePrice = 4900000.0,
             salePrice = 2450000.0,
             brandId = "nike",
-            totalSoldCount  = 1200
+            totalSoldCount = 1200
         )
 
-        // 2. Tạo danh sách các biến thể (Variant) giả
-        // Thay link ảnh bằng link thật từ internet hoặc Wikipedia bạn đã lấy
-        val imgDen = "https://upload.wikimedia.org/wikipedia/commons/a/a6/Logo_NIKE.svg" // Tạm dùng logo để test ảnh
+        val imgDen = "https://upload.wikimedia.org/wikipedia/commons/a/a6/Logo_NIKE.svg"
         val imgTrang = "https://upload.wikimedia.org/wikipedia/commons/2/20/Adidas_Logo.svg"
 
         val mockVariants = listOf(
@@ -58,27 +71,27 @@ class ProductDetailViewModel(
             Variant(variantId = "v1", sku = "p_001", color = "Đen", size = "39", stock = 10, price = 2450000.0, imageUrls = listOf(imgDen))
         )
 
-        // Bơm vào logic phân tích ban đầu
         buildInitialState(mockProduct, mockVariants)
     }
 
-    // Hàm gọi API lấy dữ liệu và khởi tạo trạng thái ban đầu
     private fun fetchProductDetails(productId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             try {
                 val product = repository.getProductById(productId).getOrThrow()
                 val variants = repository.getVariantsByProductId(productId).getOrDefault(emptyList())
-                val isFav = favoriteRepository.isFavorite(productId)
+                val isFav = if (UserSessionManager.isAuthenticated()) {
+                    favoriteRepository.isFavorite(productId, UserSessionManager.getActiveUserId() ?: "")
+                } else {
+                    false
+                }
 
                 if (variants.isNotEmpty()) {
-                    // Đảm bảo nếu DB cũ đang lưu price = 0.0 thì fallback về salePrice/basePrice của Product
                     val normalizedVariants = variants.map { v ->
                         if (v.price <= 0.0) v.copy(price = product.salePrice ?: product.basePrice) else v
                     }
                     buildInitialState(product, normalizedVariants, isFav)
                 } else {
-                    // Nếu sản phẩm trên DB chưa có subcollection variants thì tạo biến thể mặc định từ thông tin sản phẩm
                     val defaultImg = product.imageUrls.firstOrNull()
                         ?: "https://upload.wikimedia.org/wikipedia/commons/a/a6/Logo_NIKE.svg"
                     val baseVariantPrice = product.salePrice ?: product.basePrice
@@ -90,26 +103,21 @@ class ProductDetailViewModel(
                     buildInitialState(product, fallbackVariants, isFav)
                 }
             } catch (e: Exception) {
-                // Nếu lỗi kết nối hoặc dùng ID mẫu thì fallback về dữ liệu giả để vẫn test được UI
                 loadMockData()
             }
         }
     }
-
-    // --- LOGIC NGHIỆP VỤ CỐT LÕI ---
 
     fun buildInitialState(
         product: Product,
         variants: List<Variant>,
         isFavorite: Boolean = false
     ) {
-        // 1. Lọc ra danh sách màu độc nhất từ mảng variants
         val uniqueColors = variants.map { it.color }.distinct()
         val colorOptions = uniqueColors.map { colorName ->
             val firstVariantOfColor = variants.first { it.color == colorName }
             ColorOptionUiModel(
                 colorName = colorName,
-                // Lấy ảnh đầu tiên của biến thể làm thumbnail chọn màu
                 thumbnailUrl = firstVariantOfColor.imageUrls.firstOrNull()
                     ?: product.imageUrls.firstOrNull()
                     ?: "",
@@ -117,12 +125,10 @@ class ProductDetailViewModel(
             )
         }
 
-        // Tổng hợp toàn bộ ảnh của sản phẩm và các biến thể để hiển thị đầy đủ trên ảnh chính
         val allGalleryImages = (product.imageUrls + variants.flatMap { it.imageUrls })
             .filter { it.isNotBlank() }
             .distinct()
 
-        // Tính khoảng min-max từ toàn bộ biến thể
         val prices = variants.map { it.price }.filter { it > 0 }
         val minP = prices.minOrNull() ?: product.salePrice ?: product.basePrice
         val maxP = prices.maxOrNull() ?: product.salePrice ?: product.basePrice
@@ -143,7 +149,6 @@ class ProductDetailViewModel(
             )
         }
 
-        // Tự động chọn màu đầu tiên nếu có
         if (colorOptions.isNotEmpty()) {
             selectColor(colorOptions.first().colorName)
         }
@@ -153,12 +158,10 @@ class ProductDetailViewModel(
         _uiState.update { currentState ->
             val variantsForColor = currentState.allVariants.filter { it.color == colorName }
 
-            // 1. Cập nhật lại UI Model cho Màu (đổi trạng thái isSelected)
             val updatedColors = currentState.availableColors.map {
                 it.copy(isSelected = it.colorName == colorName)
             }
 
-            // 2. Tạo danh sách Size tương ứng với Màu vừa chọn
             val sizesForColor = variantsForColor.map { variant ->
                 SizeOptionUiModel(
                     sizeName = variant.size,
@@ -166,18 +169,14 @@ class ProductDetailViewModel(
                     stockQuantity = variant.stock,
                     isSelected = false
                 )
-            }.sortedBy { it.sizeName.toIntOrNull() ?: 0 } // Sắp xếp size theo thứ tự tăng dần (39, 40, 41...)
+            }.sortedBy { it.sizeName.toIntOrNull() ?: 0 }
 
-            // 3. Logic giữ Size thông minh:
-            // Nếu người dùng đã chọn Size 40 ở màu Đen, khi bấm sang màu Trắng, nếu màu Trắng có Size 40 -> Giữ nguyên. Nếu hết hàng -> Xóa chọn Size.
             val previousSize = currentState.selectedSize
             val isPreviousSizeAvailable = sizesForColor.any { it.sizeName == previousSize && it.isAvailable }
             val newSelectedSize = if (isPreviousSizeAvailable) previousSize else null
 
-            // Đánh dấu isSelected cho danh sách Size mới
             val updatedSizes = sizesForColor.map { it.copy(isSelected = it.sizeName == newSelectedSize) }
 
-            // 4. Tìm vị trí ảnh tương ứng với màu vừa chọn trong danh sách tất cả ảnh chính
             val colorMainImage = variantsForColor.firstOrNull()?.imageUrls?.firstOrNull()
             val targetImageIndex = if (colorMainImage != null) {
                 currentState.selectedColorImages.indexOf(colorMainImage).coerceAtLeast(0)
@@ -185,13 +184,10 @@ class ProductDetailViewModel(
                 0
             }
 
-            // 5. Tìm Variant cuối cùng nếu đã đủ cả Màu và Size
             val finalSelectedVariant = if (newSelectedSize != null) {
                 variantsForColor.find { it.size == newSelectedSize }
             } else null
 
-            // Tính dải giá hiển thị: nếu đã chọn biến thể cụ thể thì hiển thị giá biến thể đó
-            // Nếu chưa chọn size, hiển thị dải min - max của màu này (hoặc toàn sản phẩm)
             val colorPrices = variantsForColor.map { it.price }.filter { it > 0 }
             val minP = colorPrices.minOrNull() ?: currentState.product?.salePrice ?: currentState.product?.basePrice ?: 0.0
             val maxP = colorPrices.maxOrNull() ?: currentState.product?.salePrice ?: currentState.product?.basePrice ?: 0.0
@@ -218,12 +214,10 @@ class ProductDetailViewModel(
 
     fun selectSize(sizeName: String) {
         _uiState.update { currentState ->
-            // Cập nhật lại list size để highlight size được chọn
             val updatedSizes = currentState.availableSizesForSelectedColor.map {
                 it.copy(isSelected = it.sizeName == sizeName)
             }
 
-            // Tìm Variant cụ thể dựa trên Màu đang chọn và Size vừa bấm
             val finalSelectedVariant = currentState.allVariants.find {
                 it.color == currentState.selectedColor && it.size == sizeName
             }
@@ -257,7 +251,43 @@ class ProductDetailViewModel(
         }
     }
 
+    fun openSizeGuide() {
+        _uiState.update {
+            it.copy(isSizeGuideVisible = true)
+        }
+    }
+
+    fun closeSizeGuide() {
+        _uiState.update {
+            it.copy(isSizeGuideVisible = false)
+        }
+    }
+
+    fun dismissLoginRequiredDialog() {
+        _uiState.update {
+            it.copy(
+                isLoginRequiredDialogVisible = false,
+                pendingAuthAction = null
+            )
+        }
+    }
+
+    fun hideLoginDialogKeepPendingAction() {
+        _uiState.update {
+            it.copy(isLoginRequiredDialogVisible = false)
+        }
+    }
+
     fun openChatBottomSheet() {
+        if (!UserSessionManager.isAuthenticated()) {
+            _uiState.update {
+                it.copy(
+                    isLoginRequiredDialogVisible = true,
+                    pendingAuthAction = PendingProductAuthAction.OpenChat
+                )
+            }
+            return
+        }
         _uiState.update {
             it.copy(isChatBottomSheetVisible = true)
         }
@@ -270,13 +300,95 @@ class ProductDetailViewModel(
     }
 
     fun toggleFavorite() {
+        if (!UserSessionManager.isAuthenticated()) {
+            _uiState.update {
+                it.copy(
+                    isLoginRequiredDialogVisible = true,
+                    pendingAuthAction = PendingProductAuthAction.ToggleFavorite
+                )
+            }
+            return
+        }
+
         val productId = _uiState.value.product?.productId ?: return
-        // Optimistic UI update
+        val uid = UserSessionManager.getActiveUserId() ?: return
         _uiState.update { it.copy(isFavorite = !it.isFavorite) }
         viewModelScope.launch {
-            val result = favoriteRepository.toggleFavorite(productId)
+            val result = favoriteRepository.toggleFavorite(productId, uid)
             result.onSuccess { isFav ->
                 _uiState.update { it.copy(isFavorite = isFav) }
+            }
+        }
+    }
+
+    /**
+     * Xử lý khi người dùng chọn màu, size, số lượng và nhấn nút Thêm vào giỏ hoặc Mua ngay.
+     * Nếu chưa đăng nhập -> Hiển thị LoginRequiredDialog và lưu thao tác chờ để tự động tiếp tục sau khi đăng nhập!
+     */
+    fun handleVariantActionClick(
+        onAddedToCart: (String) -> Unit,
+        onNavigateToCheckout: (String) -> Unit
+    ) {
+        val state = _uiState.value
+        val variant = state.selectedVariant ?: return
+        val quantity = state.selectedQuantity
+
+        if (!UserSessionManager.isAuthenticated()) {
+            val pending = when (state.bottomSheetActionType) {
+                BottomSheetActionType.ADD_TO_CART -> PendingProductAuthAction.AddToCart(variant.variantId, quantity)
+                BottomSheetActionType.BUY_NOW -> PendingProductAuthAction.BuyNow(variant.variantId, quantity)
+            }
+            _uiState.update {
+                it.copy(
+                    isBottomSheetVisible = false,
+                    isLoginRequiredDialogVisible = true,
+                    pendingAuthAction = pending
+                )
+            }
+            return
+        }
+
+        when (state.bottomSheetActionType) {
+            BottomSheetActionType.ADD_TO_CART -> {
+                addToCart(variant.variantId, quantity, onAddedToCart)
+            }
+            BottomSheetActionType.BUY_NOW -> {
+                if (prepareDirectCheckout()) {
+                    onNavigateToCheckout(variant.variantId)
+                }
+            }
+        }
+    }
+
+    /**
+     * Tự động tiếp tục thao tác đang chờ sau khi đăng nhập thành công và quay lại ProductDetailScreen
+     */
+    fun consumeAndExecutePendingAction(
+        onAddedToCart: (String) -> Unit,
+        onNavigateToCheckout: (String) -> Unit
+    ) {
+        val pending = _uiState.value.pendingAuthAction ?: return
+        if (!UserSessionManager.isAuthenticated()) return
+
+        _uiState.update { it.copy(pendingAuthAction = null, isLoginRequiredDialogVisible = false) }
+        refreshCartBadge()
+
+        when (pending) {
+            is PendingProductAuthAction.AddToCart -> {
+                addToCart(pending.variantId, pending.quantity) {
+                    onAddedToCart("Đã đăng nhập & thêm sản phẩm vào giỏ hàng!")
+                }
+            }
+            is PendingProductAuthAction.BuyNow -> {
+                if (prepareDirectCheckout()) {
+                    onNavigateToCheckout(pending.variantId)
+                }
+            }
+            PendingProductAuthAction.ToggleFavorite -> {
+                toggleFavorite()
+            }
+            PendingProductAuthAction.OpenChat -> {
+                openChatBottomSheet()
             }
         }
     }
@@ -328,16 +440,44 @@ class ProductDetailViewModel(
         }
     }
 
-    fun addToCart(variantId: String) {
-        val variant = _uiState.value.allVariants.find { it.variantId == variantId } ?: _uiState.value.selectedVariant
+    fun addToCart(
+        variantId: String,
+        quantityToAdd: Int = _uiState.value.selectedQuantity,
+        onSuccess: ((String) -> Unit)? = null
+    ) {
+        val state = _uiState.value
+        val product = state.product ?: return
+        val variant = state.allVariants.find { it.variantId == variantId } ?: state.selectedVariant
         if (variant != null && variant.stock > 0) {
-            val quantityToAdd = _uiState.value.selectedQuantity
+            val unitPrice = if (variant.price > 0) variant.price else (product.salePrice ?: product.basePrice)
+            val imageSnapshot = variant.imageUrls.firstOrNull() ?: product.imageUrls.firstOrNull()
+
             _uiState.update { currentState ->
                 currentState.copy(
                     cartItemCount = currentState.cartItemCount + quantityToAdd,
                     isBottomSheetVisible = false
                 )
             }
+
+            // Đồng bộ lên Firestore carts/{userId}/items/{variantId} kèm giới hạn tồn kho (maxStock)
+            viewModelScope.launch {
+                val cartItem = CartItem(
+                    itemId = variant.variantId,
+                    productId = product.productId,
+                    variantId = variant.variantId,
+                    productName = product.name,
+                    imageUrl = imageSnapshot,
+                    size = variant.size,
+                    color = variant.color,
+                    unitPrice = unitPrice,
+                    quantity = quantityToAdd.coerceAtMost(variant.stock),
+                    maxStock = variant.stock
+                )
+                cartRepository.addOrUpdateCartItem(cartItem, UserSessionManager.getActiveUserId()).onSuccess { items ->
+                    _uiState.update { it.copy(cartItemCount = items.size) }
+                }
+            }
+            onSuccess?.invoke("Đã thêm vào giỏ hàng")
         }
     }
 

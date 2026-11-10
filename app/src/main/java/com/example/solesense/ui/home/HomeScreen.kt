@@ -1,5 +1,6 @@
 package com.example.solesense.ui.home
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,13 +22,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -36,6 +42,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.solesense.model.catalog.Brand
 import com.example.solesense.model.catalog.ProductModel
+import com.example.solesense.repository.FavoriteRepository
+import com.example.solesense.ui.components.LoginRequiredDialog
 import com.example.solesense.ui.components.NetworkStatusBanner
 import com.example.solesense.ui.components.SearchBar
 import com.example.solesense.ui.home.components.BrandSection
@@ -43,12 +51,16 @@ import com.example.solesense.ui.home.components.HomeHeader
 import com.example.solesense.ui.home.components.NewArrivalsSection
 import com.example.solesense.ui.home.components.TrendingProductsSection
 import com.example.solesense.ui.home.components.recommendedSection
+import com.example.solesense.utils.UserSessionManager
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onNavigateToExplore: () -> Unit,
     onNavigateToLogin: () -> Unit = {},
+    onNavigateToProfile: () -> Unit = {},
+    onNavigateToFavorites: () -> Unit = {},
     onProductClick: (String) -> Unit = {},
     viewModel: HomeViewModel = viewModel(),
     modifier: Modifier = Modifier
@@ -61,7 +73,6 @@ fun HomeScreen(
 
         NetworkStatusBanner(isOnline = isOnline)
 
-        // 2. Nội dung chính hỗ trợ Kéo để làm mới (Pull-to-refresh)
         when (val state = uiState) {
             is HomeUiState.Loading -> {
                 Box(
@@ -102,6 +113,8 @@ fun HomeScreen(
                         recommendedProducts = state.recommendedProducts,
                         onNavigateToExplore = onNavigateToExplore,
                         onNavigateToLogin = onNavigateToLogin,
+                        onNavigateToProfile = onNavigateToProfile,
+                        onNavigateToFavorites = onNavigateToFavorites,
                         onProductClick = onProductClick
                     )
                 }
@@ -118,30 +131,72 @@ fun HomeScreenContent(
     recommendedProducts: List<ProductModel>,
     onNavigateToExplore: () -> Unit,
     onNavigateToLogin: () -> Unit,
+    onNavigateToProfile: () -> Unit = {},
+    onNavigateToFavorites: () -> Unit = {},
     onProductClick: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val isLoggedIn by remember { mutableStateOf(false) }
-    val userName by remember { mutableStateOf("Nguyễn Văn A") }
+    val currentUser by UserSessionManager.currentUser.collectAsState()
+    val isLoggedIn = currentUser != null
+    val userName = currentUser?.fullName ?: "Khách hàng"
+    val avatarUrl = currentUser?.avatarUrl
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val favoriteRepository = remember { FavoriteRepository() }
+
+    var showLoginRequiredDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentUser?.userId) {
+        if (currentUser != null) {
+            favoriteRepository.loadFavoriteProductIds(currentUser!!.userId)
+        }
+    }
+
+    fun handleProductFavoriteToggle(product: ProductModel) {
+        if (!isLoggedIn) {
+            showLoginRequiredDialog = true
+        } else {
+            scope.launch {
+                favoriteRepository.toggleFavorite(product.id).onSuccess { isFav ->
+                    val msg = if (isFav) "Đã thêm ${product.name} vào yêu thích" else "Đã bỏ khỏi danh sách yêu thích"
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
         modifier = modifier
             .fillMaxSize()
             .background(Color.White),
-        contentPadding = PaddingValues(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 80.dp),
+        contentPadding = PaddingValues(top = 12.dp, start = 16.dp, end = 16.dp, bottom = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        // 1. Header & Search
+        // 1. Header & Search (Ấn tìm kiếm chuyển sang tab Khám phá)
         item(span = { GridItemSpan(2) }) {
             Column {
                 HomeHeader(
                     isLoggedIn = isLoggedIn,
                     userName = userName,
+                    avatarUrl = avatarUrl,
                     onLoginClick = onNavigateToLogin,
-                    onNotificationClick = {},
-                    onFavoriteClick = {}
+                    onProfileClick = onNavigateToProfile,
+                    onNotificationClick = {
+                        if (!isLoggedIn) {
+                            showLoginRequiredDialog = true
+                        } else {
+                            Toast.makeText(context, "Chức năng thông báo sẽ cập nhật sau", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onFavoriteClick = {
+                        if (!isLoggedIn) {
+                            showLoginRequiredDialog = true
+                        } else {
+                            onNavigateToFavorites()
+                        }
+                    }
                 )
                 SearchBar(onClick = onNavigateToExplore)
             }
@@ -164,12 +219,12 @@ fun HomeScreenContent(
             }
         }
 
-        // 3. Danh mục Brand (Cuộn ngang)
+        // 3. Danh mục Brand (Ấn vào chuyển sang tab Khám phá)
         item(span = { GridItemSpan(2) }) {
             BrandSection(
-                brands = brands, // List<Brand> nhận từ HomeUiState.Success
-                onBrandClick = { clickedBrand ->
-                    // TODO: Chuyển sang màn hình Lọc sản phẩm theo Hãng
+                brands = brands,
+                onBrandClick = { _ ->
+                    onNavigateToExplore()
                 }
             )
         }
@@ -179,7 +234,7 @@ fun HomeScreenContent(
             TrendingProductsSection(
                 products = trendingProducts,
                 onSeeAllClick = onNavigateToExplore,
-                onFavoriteClick = {},
+                onFavoriteClick = { product -> handleProductFavoriteToggle(product) },
                 onProductClick = { product -> onProductClick(product.id) }
             )
         }
@@ -189,7 +244,7 @@ fun HomeScreenContent(
             NewArrivalsSection(
                 products = newArrivals,
                 onSeeAllClick = onNavigateToExplore,
-                onFavoriteClick = {},
+                onFavoriteClick = { product -> handleProductFavoriteToggle(product) },
                 onProductClick = { product -> onProductClick(product.id) }
             )
         }
@@ -197,10 +252,21 @@ fun HomeScreenContent(
         // 6. RecommendedSection
         recommendedSection(
             products = recommendedProducts,
-            onFavoriteClick = {},
+            onFavoriteClick = { product -> handleProductFavoriteToggle(product) },
             onProductClick = { product -> onProductClick(product.id) }
         )
     }
+
+    LoginRequiredDialog(
+        isVisible = showLoginRequiredDialog,
+        onLoginClick = {
+            showLoginRequiredDialog = false
+            onNavigateToLogin()
+        },
+        onDismiss = {
+            showLoginRequiredDialog = false
+        }
+    )
 }
 
 @Preview(showBackground = true)

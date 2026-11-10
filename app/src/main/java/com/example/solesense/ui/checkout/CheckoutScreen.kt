@@ -1,11 +1,13 @@
 package com.example.solesense.ui.checkout
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -13,7 +15,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.solesense.ui.address.ShippingAddressScreen
 import com.example.solesense.ui.checkout.components.*
 import com.example.solesense.ui.theme.SoleSenseTheme
 
@@ -26,6 +32,35 @@ fun CheckoutScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Đồng bộ bộ đếm QR 5 phút theo thời gian thực ngay khi người dùng quay lại ứng dụng (ON_RESUME)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.syncQrTimerWithWallClock()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    // Nếu đang mở màn hình Địa chỉ giao hàng (Chọn / Thêm mới / Sửa / Xóa trên Firebase)
+    if (uiState.isAddressSheetVisible) {
+        BackHandler {
+            viewModel.closeAddressSheet()
+        }
+        ShippingAddressScreen(
+            initialSelectedAddressId = uiState.selectedAddress?.addressId,
+            onBackClick = viewModel::closeAddressSheet,
+            onAddressApplied = { selectedAddress ->
+                viewModel.selectShippingAddress(selectedAddress)
+            }
+        )
+        return
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -64,7 +99,7 @@ fun CheckoutScreen(
             contentPadding = PaddingValues(vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            // 1. Thông tin người nhận
+            // 1. Thông tin người nhận (bấm vào sẽ mở màn hình Địa chỉ giao hàng)
             item {
                 ShippingAddressSection(
                     address = uiState.selectedAddress,
@@ -143,21 +178,11 @@ fun CheckoutScreen(
             }
         }
 
-        // BottomSheet chỉnh sửa / thêm địa chỉ nhận hàng
-        AddressEditBottomSheet(
-            isVisible = uiState.isAddressSheetVisible,
-            currentAddress = uiState.selectedAddress,
-            onDismissRequest = viewModel::closeAddressSheet,
-            onSaveAddress = { receiverName, phone, detail ->
-                viewModel.saveShippingAddress(receiverName, phone, detail)
-                Toast.makeText(context, "Đã lưu địa chỉ nhận hàng", Toast.LENGTH_SHORT).show()
-            }
-        )
-
-        // Dialog Thanh toán VietQR (Giữ đơn 5 phút, tự hoàn kho nếu hủy hoặc hết hạn)
+        // Dialog Thanh toán VietQR (Đồng bộ thời gian thực 5 phút, tự hoàn kho & hiển thị giao diện hết hạn ic_time_expire)
         QrPaymentDialog(
             payment = uiState.activePayment,
             remainingSeconds = uiState.qrRemainingSeconds,
+            isQrExpired = uiState.isQrExpired,
             isProcessing = uiState.isProcessingQrAction,
             onConfirmPaidClick = {
                 viewModel.confirmQrPaymentDemo(
@@ -174,6 +199,10 @@ fun CheckoutScreen(
                 viewModel.cancelQrPayment { msg ->
                     Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                 }
+            },
+            onCreateNewOrderClick = {
+                viewModel.dismissExpiredQrDialog()
+                Toast.makeText(context, "Vui lòng nhấn Đặt hàng để tạo mã thanh toán mới", Toast.LENGTH_SHORT).show()
             }
         )
     }

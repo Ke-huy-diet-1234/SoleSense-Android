@@ -68,28 +68,49 @@ fun ShippingAddressSection(
 
                 if (address != null) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = address.receiverName,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = Color.Black
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = address.receiverName,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = Color.Black
+                                )
                             )
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
+                            if (address.isDefault) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFFFDE4E8))
+                                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "Mặc định",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            color = Color(0xFFD83B56),
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 10.sp
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(3.dp))
                         Text(
                             text = address.phone,
                             style = MaterialTheme.typography.bodySmall.copy(
                                 color = Color(0xFF616161),
-                                fontSize = 12.sp
+                                fontSize = 12.5.sp
                             )
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = address.detail,
+                            text = address.toMultiLineAddress(),
                             style = MaterialTheme.typography.bodySmall.copy(
                                 color = Color(0xFF616161),
-                                fontSize = 12.sp
+                                fontSize = 12.5.sp,
+                                lineHeight = 17.sp
                             )
                         )
                     }
@@ -121,4 +142,3 @@ fun ShippingAddressSection(
         }
     }
 }
-

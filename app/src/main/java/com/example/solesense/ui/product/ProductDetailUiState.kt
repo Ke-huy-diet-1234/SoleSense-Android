@@ -3,6 +3,13 @@ package com.example.solesense.ui.product
 import com.example.solesense.model.catalog.Product
 import com.example.solesense.model.catalog.Variant
 
+sealed interface PendingProductAuthAction {
+    data class AddToCart(val variantId: String, val quantity: Int) : PendingProductAuthAction
+    data class BuyNow(val variantId: String, val quantity: Int) : PendingProductAuthAction
+    data object ToggleFavorite : PendingProductAuthAction
+    data object OpenChat : PendingProductAuthAction
+}
+
 data class ProductDetailUiState(
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
@@ -29,22 +36,20 @@ data class ProductDetailUiState(
     val selectedSize: String? = null,
     val selectedQuantity: Int = 1,
 
-    // BottomSheet trạng thái
+    // BottomSheet & Dialog trạng thái
     val isBottomSheetVisible: Boolean = false,
     val bottomSheetActionType: BottomSheetActionType = BottomSheetActionType.BUY_NOW,
     val isChatBottomSheetVisible: Boolean = false,
+    val isSizeGuideVisible: Boolean = false,
+    val isLoginRequiredDialogVisible: Boolean = false,
+    val pendingAuthAction: PendingProductAuthAction? = null,
 
     // Biến thể cuối cùng được chọn (Sẵn sàng thêm vào giỏ)
     val selectedVariant: Variant? = null,
 
     // Các trạng thái khác
     val isFavorite: Boolean = false,
-    val cartItemCount: Int = 0,
-
-    // Dữ liệu phụ trợ (Có thể fetch sau để tối ưu tốc độ load trang)
-    // val reviews: List<Review> = emptyList(),
-    // val averageRating: Double = 0.0,
-    // val relatedProducts: List<Product> = emptyList()
+    val cartItemCount: Int = 0
 )
 
 enum class BottomSheetActionType {
