@@ -150,11 +150,11 @@ fun CartScreen(
                 color = Color.White,
                 shadowElevation = 1.dp
             ) {
-                Column(modifier = Modifier.statusBarsPadding()) {
+                Column {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(54.dp)
+                            .height(46.dp)
                             .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -949,30 +949,15 @@ private fun ColorAndSizeCompactRow(
     colorName: String,
     sizeName: String
 ) {
-    val dotColor = resolveShoeColorDot(colorName)
-    val needsBorder = dotColor == Color.White || colorName.contains("Trắng", ignoreCase = true)
-
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(11.dp)
-                .clip(CircleShape)
-                .background(dotColor)
-                .then(
-                    if (needsBorder) Modifier.border(1.dp, Color(0xFFD0D0D0), CircleShape) else Modifier
-                )
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-            text = "${colorName.ifBlank { "Tiêu chuẩn" }}  |  Size: $sizeName",
-            style = MaterialTheme.typography.bodySmall.copy(
-                color = Color(0xFF757575),
-                fontSize = 12.sp
-            ),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
+    Text(
+        text = "${colorName.ifBlank { "Tiêu chuẩn" }}  |  Size: $sizeName",
+        style = MaterialTheme.typography.bodySmall.copy(
+            color = Color(0xFF757575),
+            fontSize = 12.sp
+        ),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
 }
 
 @Composable
@@ -1001,23 +986,6 @@ private fun CartCheckbox(
                 modifier = Modifier.size(14.dp)
             )
         }
-    }
-}
-
-private fun resolveShoeColorDot(colorName: String): Color {
-    val lower = colorName.lowercase()
-    return when {
-        lower.contains("đen") || lower.contains("black") -> Color(0xFF1A1A1A)
-        lower.contains("trắng") || lower.contains("white") -> Color.White
-        lower.contains("xám") || lower.contains("grey") || lower.contains("bạc") -> Color(0xFF9E9E9E)
-        lower.contains("xanh dương") || lower.contains("blue") -> Color(0xFF1565C0)
-        lower.contains("xanh lá") || lower.contains("green") -> Color(0xFF2E7D32)
-        lower.contains("đỏ") || lower.contains("red") -> Color(0xFFE53935)
-        lower.contains("hồng") || lower.contains("pink") -> Color(0xFFF06292)
-        lower.contains("vàng") || lower.contains("yellow") -> Color(0xFFFBC02D)
-        lower.contains("nâu") || lower.contains("brown") -> Color(0xFF6D4C41)
-        lower.contains("cam") || lower.contains("orange") -> Color(0xFFFB8C00)
-        else -> Color(0xFF424242)
     }
 }
 

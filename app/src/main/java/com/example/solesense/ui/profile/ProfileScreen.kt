@@ -58,9 +58,8 @@ fun ProfileScreen(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFFFAFAFA))
-            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp)
+            .padding(horizontal = 20.dp, vertical = 10.dp)
     ) {
         Text(
             text = "Tài khoản cá nhân",
@@ -198,60 +197,108 @@ fun ProfileScreen(
 
         Spacer(modifier = Modifier.height(22.dp))
 
-        Text(
-            text = "TIỆN ÍCH TÀI KHOẢN",
-            style = MaterialTheme.typography.labelLarge.copy(
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF757575)
+        val userRole = currentUser?.role?.uppercase() ?: ""
+        val isStaffOrAdmin = isLoggedIn && userRole in setOf("ADMIN", "SUPPORT")
+
+        if (isStaffOrAdmin) {
+            Text(
+                text = "CHẾ ĐỘ XEM TRƯỚC CỬA HÀNG",
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF757575)
+                )
             )
-        )
 
-        Spacer(modifier = Modifier.height(10.dp))
-
-        ProfileActionItem(
-            title = "Địa chỉ giao hàng",
-            subtitle = "Thêm, sửa, xóa và đặt địa chỉ nhận hàng mặc định",
-            onClick = {
-                requireAuthOrExecute {
-                    onNavigateToAddresses()
-                }
-            }
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        ProfileActionItem(
-            title = "Lịch sử đơn hàng",
-            subtitle = "Theo dõi trạng thái chờ xác nhận, đang giao và đã giao",
-            onClick = {
-                requireAuthOrExecute {
-                    Toast.makeText(context, "Đang tải lịch sử đơn hàng của bạn", Toast.LENGTH_SHORT).show()
-                }
-            }
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        ProfileActionItem(
-            title = if (isLoggedIn && favoriteIds.isNotEmpty()) {
-                "Danh sách sản phẩm yêu thích (${favoriteIds.size})"
-            } else {
-                "Danh sách sản phẩm yêu thích"
-            },
-            subtitle = "Xem các mẫu giày bạn đã lưu trên hệ thống",
-            onClick = {
-                requireAuthOrExecute {
-                    onNavigateToFavorites()
-                }
-            }
-        )
-
-        if (isLoggedIn && currentUser?.role?.uppercase() in setOf("ADMIN", "SUPPORT")) {
             Spacer(modifier = Modifier.height(10.dp))
+
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xFFFFF8E1),
+                border = BorderStroke(1.dp, Color(0xFFFFE082)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Tài khoản $userRole chỉ được xem giao diện",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFE65100)
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Các tính năng mua hàng, giỏ hàng, thanh toán, địa chỉ nhận hàng và yêu thích đã được khóa để đảm bảo đúng phân quyền.",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = Color(0xFF5D4037),
+                            lineHeight = 18.sp
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = onSwitchToRoleDashboard,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF1E1E1E),
+                            contentColor = Color.White
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp)
+                    ) {
+                        Text(
+                            text = "Quay về Bảng điều khiển $userRole",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        } else {
+            Text(
+                text = "TIỆN ÍCH TÀI KHOẢN",
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF757575)
+                )
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             ProfileActionItem(
-                title = "Mở bảng điều khiển ${currentUser?.role}",
-                subtitle = "Chuyển về giao diện quản trị / hỗ trợ khách hàng",
-                onClick = onSwitchToRoleDashboard
+                title = "Địa chỉ giao hàng",
+                subtitle = "Thêm, sửa, xóa và đặt địa chỉ nhận hàng mặc định",
+                onClick = {
+                    requireAuthOrExecute {
+                        onNavigateToAddresses()
+                    }
+                }
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            ProfileActionItem(
+                title = "Lịch sử đơn hàng",
+                subtitle = "Theo dõi trạng thái chờ xác nhận, đang giao và đã giao",
+                onClick = {
+                    requireAuthOrExecute {
+                        Toast.makeText(context, "Đang tải lịch sử đơn hàng của bạn", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            ProfileActionItem(
+                title = if (isLoggedIn && favoriteIds.isNotEmpty()) {
+                    "Danh sách sản phẩm yêu thích (${favoriteIds.size})"
+                } else {
+                    "Danh sách sản phẩm yêu thích"
+                },
+                subtitle = "Xem các mẫu giày bạn đã lưu trên hệ thống",
+                onClick = {
+                    requireAuthOrExecute {
+                        onNavigateToFavorites()
+                    }
+                }
             )
         }
 

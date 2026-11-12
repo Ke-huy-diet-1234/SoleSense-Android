@@ -1,5 +1,6 @@
 package com.example.solesense.ui.navigation
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -37,6 +39,7 @@ import com.example.solesense.ui.auth.EmailLoginScreen
 import com.example.solesense.ui.auth.RegisterScreen
 import com.example.solesense.ui.cart.CartScreen
 import com.example.solesense.ui.chat.ChatScreen
+import com.example.solesense.ui.chat.ChatViewModel
 import com.example.solesense.ui.checkout.CheckoutScreen
 import com.example.solesense.ui.explore.ExploreScreen
 import com.example.solesense.ui.favorite.FavoriteScreen
@@ -96,10 +99,17 @@ fun MainScreen() {
         Screen.Profile.route
     )
 
+    val currentRole = (sessionState as? AppAuthSessionState.Authenticated)?.user?.role?.uppercase() ?: ""
+    val isStaffOrAdminPreview = previewCustomerStorefront && currentRole in setOf("ADMIN", "SUPPORT")
+
     Scaffold(
         bottomBar = {
             if (currentRoute in bottomBarRoutes) {
-                AppBottomNavigationBar(navController = navController)
+                AppBottomNavigationBar(
+                    navController = navController,
+                    isReadOnlyPreview = isStaffOrAdminPreview,
+                    previewRoleName = currentRole
+                )
             }
         }
     ) { innerPadding ->
@@ -109,11 +119,97 @@ fun MainScreen() {
             Modifier
         }
 
-        AppNavHost(
-            navController = navController,
-            onReturnToRoleDashboard = { previewCustomerStorefront = false },
-            modifier = contentModifier
-        )
+        Column(modifier = contentModifier.fillMaxSize()) {
+            if (isStaffOrAdminPreview && currentRoute in bottomBarRoutes) {
+                StorefrontPreviewBanner(
+                    roleName = currentRole,
+                    onExitPreviewClick = { previewCustomerStorefront = false }
+                )
+            }
+
+            AppNavHost(
+                navController = navController,
+                onReturnToRoleDashboard = { previewCustomerStorefront = false },
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+/**
+ * Thanh thông báo cố định ở trên đầu khi Admin / Support chuyển sang chế độ xem giao diện cửa hàng.
+ * Giúp nhận biết rõ trạng thái "Chỉ xem" và quay về Bảng điều khiển chỉ với 1 chạm ở bất kỳ tab nào.
+ */
+@Composable
+fun StorefrontPreviewBanner(
+    roleName: String,
+    onExitPreviewClick: () -> Unit
+) {
+    Surface(
+        color = Color(0xFF1E1E1E),
+        shadowElevation = 2.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFFFFB300))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = roleName,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = Color(0xFF1A1A1A),
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 10.sp
+                        )
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Chế độ Chỉ xem giao diện (Read-Only)",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = Color.White,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 11.5.sp
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Surface(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable { onExitPreviewClick() },
+                color = Color(0xFFEC3824)
+            ) {
+                Text(
+                    text = if (roleName == "ADMIN") "Về trang Admin" else "Về trang Support",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    ),
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                )
+            }
+        }
     }
 }
 
@@ -124,7 +220,12 @@ fun MainScreen() {
  * - Hiển thị Badge đếm số tin nhắn chưa đọc trên mục Chat.
  */
 @Composable
-fun AppBottomNavigationBar(navController: NavHostController) {
+fun AppBottomNavigationBar(
+    navController: NavHostController,
+    isReadOnlyPreview: Boolean = false,
+    previewRoleName: String = ""
+) {
+    val context = LocalContext.current
     val screens = listOf(
         Screen.Home,
         Screen.Explore,
@@ -154,16 +255,20 @@ fun AppBottomNavigationBar(navController: NavHostController) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp)
-                    .padding(horizontal = 6.dp),
+                    .padding(horizontal = 2.dp),
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 screens.forEach { screen ->
                     val isSelected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
-                    val badgeCount = when (screen) {
-                        Screen.Cart -> distinctCartCount
-                        Screen.Chat -> unreadChatCount
-                        else -> 0
+                    val badgeCount = if (isReadOnlyPreview) {
+                        0
+                    } else {
+                        when (screen) {
+                            Screen.Cart -> distinctCartCount
+                            Screen.Chat -> unreadChatCount
+                            else -> 0
+                        }
                     }
 
                     BottomNavTabItem(
@@ -172,6 +277,14 @@ fun AppBottomNavigationBar(navController: NavHostController) {
                         badgeCount = badgeCount,
                         modifier = Modifier.weight(1f),
                         onClick = {
+                            if (isReadOnlyPreview && (screen == Screen.Cart || screen == Screen.Chat)) {
+                                Toast.makeText(
+                                    context,
+                                    "Chế độ Chỉ xem ($previewRoleName): Không sử dụng Giỏ hàng & Chat khách hàng",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return@BottomNavTabItem
+                            }
                             if (screen == Screen.Chat) {
                                 CartRepository.setUnreadMessageCount(0)
                             }
@@ -222,9 +335,11 @@ private fun BottomNavTabItem(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
             modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 3.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .background(if (isSelected) Color(0xFFF3F4F6) else Color.Transparent)
-                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .padding(horizontal = 2.dp, vertical = 4.dp)
         ) {
             Box(contentAlignment = Alignment.TopEnd) {
                 Icon(
@@ -264,7 +379,8 @@ private fun BottomNavTabItem(
             Text(
                 text = screen.title,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
+                overflow = TextOverflow.Visible,
                 fontSize = 10.5.sp,
                 lineHeight = 12.sp,
                 color = contentColor,
@@ -280,6 +396,8 @@ fun AppNavHost(
     onReturnToRoleDashboard: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val chatViewModel: ChatViewModel = viewModel()
+
     NavHost(
         navController = navController,
         startDestination = Screen.Home.route,
@@ -340,8 +458,15 @@ fun AppNavHost(
                 CartRepository.setUnreadMessageCount(0)
             }
             ChatScreen(
+                viewModel = chatViewModel,
                 onNavigateToAuth = {
                     navController.navigate("auth_options")
+                },
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onProductClick = { productId ->
+                    navController.navigate("product_detail/$productId")
                 }
             )
         }
@@ -401,7 +526,14 @@ fun AppNavHost(
                 },
                 onNavigateToAuth = {
                     navController.navigate("auth_options")
-                }
+                },
+                onNavigateToChat = { productId, name, price, imageUrl, color, size ->
+                    chatViewModel.setPinnedProductContext(productId, name, price, imageUrl, color, size)
+                    navController.navigate(Screen.Chat.route) {
+                        launchSingleTop = true
+                    }
+                },
+                onReturnToRoleDashboard = onReturnToRoleDashboard
             )
         }
 

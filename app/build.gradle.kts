@@ -87,4 +87,10 @@ dependencies {
     // Thư viện Coil
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("io.coil-kt:coil-svg:2.6.0")
+
+    // Firebase AI Logic (Gemini)
+    implementation("com.google.firebase:firebase-ai")
+    // App Check: chống người khác dùng trộm quota AI
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
+    debugImplementation("com.google.firebase:firebase-appcheck-debug")
 }

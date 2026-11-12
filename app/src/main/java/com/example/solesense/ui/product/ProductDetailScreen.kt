@@ -29,15 +29,20 @@ fun ProductDetailScreen(
     onSearchClick: () -> Unit,
     onNavigateToCheckout: (variantId: String) -> Unit,
     onNavigateToAuth: () -> Unit = {},
+    onNavigateToChat: ((productId: String, name: String, price: Double, imageUrl: String, color: String, size: String) -> Unit)? = null,
+    onReturnToRoleDashboard: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val sessionState by UserSessionManager.sessionState.collectAsState()
+    val currentUser by UserSessionManager.currentUser.collectAsState()
+    val userRole = currentUser?.role?.uppercase() ?: ""
+    val isReadOnlyPreview = userRole in setOf("ADMIN", "SUPPORT")
     val context = LocalContext.current
 
     // Tự động tiếp tục thao tác (Thêm vào giỏ / Mua ngay / Yêu thích) ngay khi đăng nhập xong và quay lại ProductDetail!
     LaunchedEffect(sessionState, uiState.pendingAuthAction) {
-        if (sessionState is AppAuthSessionState.Authenticated && uiState.pendingAuthAction != null) {
+        if (!isReadOnlyPreview && sessionState is AppAuthSessionState.Authenticated && uiState.pendingAuthAction != null) {
             viewModel.consumeAndExecutePendingAction(
                 onAddedToCart = { msg ->
                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
@@ -52,17 +57,44 @@ fun ProductDetailScreen(
         containerColor = Color.White,
         topBar = {
             ProductTopBar(
-                cartItemCount = uiState.cartItemCount,
+                cartItemCount = if (isReadOnlyPreview) 0 else uiState.cartItemCount,
                 onBackClick = onBackClick,
                 onSearchClick = onSearchClick,
-                onCartClick = onCartClick,
+                onCartClick = {
+                    if (isReadOnlyPreview) {
+                        Toast.makeText(
+                            context,
+                            "Chế độ Chỉ xem ($userRole): Không sử dụng Giỏ hàng của khách",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        onCartClick()
+                    }
+                },
                 onMenuClick = {}
             )
         },
         floatingActionButton = {
-            ProductChatFab(
-                onClick = viewModel::openChatBottomSheet
-            )
+            if (!isReadOnlyPreview) {
+                ProductChatFab(
+                    onClick = {
+                        if (!UserSessionManager.isAuthenticated()) {
+                            viewModel.openChatBottomSheet()
+                        } else {
+                            val product = uiState.product
+                            if (product != null && onNavigateToChat != null) {
+                                val color = uiState.selectedColor ?: uiState.selectedVariant?.color ?: "Trắng"
+                                val size = uiState.selectedSize ?: uiState.selectedVariant?.size ?: "41"
+                                val price = product.salePrice ?: product.basePrice
+                                val img = product.imageUrls.firstOrNull() ?: ""
+                                onNavigateToChat(product.productId, product.name, price, img, color, size)
+                            } else {
+                                viewModel.openChatBottomSheet()
+                            }
+                        }
+                    }
+                )
+            }
         },
         bottomBar = {
             val isVariantValid = (uiState.selectedVariant?.stock ?: 0) > 0
@@ -70,11 +102,18 @@ fun ProductDetailScreen(
             ProductBottomBar(
                 isBuyEnabled = isVariantValid,
                 onAddToCartClick = {
-                    viewModel.openBottomSheet(BottomSheetActionType.ADD_TO_CART)
+                    if (!isReadOnlyPreview) {
+                        viewModel.openBottomSheet(BottomSheetActionType.ADD_TO_CART)
+                    }
                 },
                 onBuyNowClick = {
-                    viewModel.openBottomSheet(BottomSheetActionType.BUY_NOW)
-                }
+                    if (!isReadOnlyPreview) {
+                        viewModel.openBottomSheet(BottomSheetActionType.BUY_NOW)
+                    }
+                },
+                isReadOnlyPreview = isReadOnlyPreview,
+                previewRoleName = userRole,
+                onReturnToDashboardClick = onReturnToRoleDashboard
             )
         }
     ) { paddingValues ->
@@ -117,8 +156,18 @@ fun ProductDetailScreen(
                         displayMaxPrice = uiState.displayMaxPrice,
                         displayOriginalPrice = uiState.displayOriginalPrice,
                         soldCount = product.totalSoldCount,
-                        isFavorite = uiState.isFavorite,
-                        onFavoriteClick = viewModel::toggleFavorite
+                        isFavorite = if (isReadOnlyPreview) false else uiState.isFavorite,
+                        onFavoriteClick = {
+                            if (isReadOnlyPreview) {
+                                Toast.makeText(
+                                    context,
+                                    "Chế độ Chỉ xem ($userRole): Không thao tác Yêu thích",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                viewModel.toggleFavorite()
+                            }
+                        }
                     )
                 }
 

@@ -138,6 +138,8 @@ fun HomeScreenContent(
 ) {
     val currentUser by UserSessionManager.currentUser.collectAsState()
     val isLoggedIn = currentUser != null
+    val userRole = currentUser?.role?.uppercase() ?: ""
+    val isReadOnlyPreview = userRole in setOf("ADMIN", "SUPPORT")
     val userName = currentUser?.fullName ?: "Khách hàng"
     val avatarUrl = currentUser?.avatarUrl
     val context = LocalContext.current
@@ -146,13 +148,21 @@ fun HomeScreenContent(
 
     var showLoginRequiredDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(currentUser?.userId) {
-        if (currentUser != null) {
+    LaunchedEffect(currentUser?.userId, isReadOnlyPreview) {
+        if (currentUser != null && !isReadOnlyPreview) {
             favoriteRepository.loadFavoriteProductIds(currentUser!!.userId)
         }
     }
 
     fun handleProductFavoriteToggle(product: ProductModel) {
+        if (isReadOnlyPreview) {
+            Toast.makeText(
+                context,
+                "Chế độ Chỉ xem ($userRole): Không thao tác Yêu thích sản phẩm",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
         if (!isLoggedIn) {
             showLoginRequiredDialog = true
         } else {
@@ -170,7 +180,7 @@ fun HomeScreenContent(
         modifier = modifier
             .fillMaxSize()
             .background(Color.White),
-        contentPadding = PaddingValues(top = 12.dp, start = 16.dp, end = 16.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(top = 0.dp, start = 16.dp, end = 16.dp, bottom = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
@@ -191,7 +201,13 @@ fun HomeScreenContent(
                         }
                     },
                     onFavoriteClick = {
-                        if (!isLoggedIn) {
+                        if (isReadOnlyPreview) {
+                            Toast.makeText(
+                                context,
+                                "Chế độ Chỉ xem ($userRole): Không sử dụng danh sách Yêu thích",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        } else if (!isLoggedIn) {
                             showLoginRequiredDialog = true
                         } else {
                             onNavigateToFavorites()

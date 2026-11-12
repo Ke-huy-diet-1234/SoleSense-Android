@@ -38,13 +38,10 @@ fun HomeHeader(
     onFavoriteClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val favoriteIds by FavoriteRepository.favoriteProductIds.collectAsState()
-    val hasFavorites = isLoggedIn && favoriteIds.isNotEmpty()
-
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(top = 0.dp, bottom = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -132,32 +129,12 @@ fun HomeHeader(
                 )
             }
             IconButton(onClick = onFavoriteClick) {
-                Box(contentAlignment = Alignment.TopEnd) {
-                    Icon(
-                        imageVector = if (hasFavorites) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = "Favorites",
-                        tint = if (hasFavorites) Color(0xFFE53935) else Color.Black,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    if (hasFavorites) {
-                        Box(
-                            modifier = Modifier
-                                .offset(x = 4.dp, y = (-3).dp)
-                                .size(15.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFE53935)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = favoriteIds.size.toString(),
-                                color = Color.White,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                lineHeight = 9.sp
-                            )
-                        }
-                    }
-                }
+                Icon(
+                    imageVector = Icons.Outlined.FavoriteBorder,
+                    contentDescription = "Favorites",
+                    tint = Color.Black,
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
     }
