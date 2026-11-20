@@ -66,7 +66,12 @@ fun ShippingAddressSection(
 
                 Spacer(modifier = Modifier.width(12.dp))
 
-                if (address != null) {
+                val isValidAddress = address != null &&
+                        address.receiverName.isNotBlank() &&
+                        address.phone.isNotBlank() &&
+                        (address.detail.isNotBlank() || address.province.isNotBlank())
+
+                if (isValidAddress && address != null) {
                     Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
@@ -115,14 +120,25 @@ fun ShippingAddressSection(
                         )
                     }
                 } else {
-                    Text(
-                        text = "+ Thêm địa chỉ nhận hàng",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFFE53935)
-                        ),
-                        modifier = Modifier.weight(1f)
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "⚠️ Chưa có thông tin người nhận",
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFD32F2F),
+                                fontSize = 14.sp
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "Bắt buộc phải nhập họ tên, số điện thoại và địa chỉ trước khi nhận hàng. Chạm để bổ sung ngay.",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = Color(0xFF616161),
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp
+                            )
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(8.dp))

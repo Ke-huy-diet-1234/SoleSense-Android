@@ -39,17 +39,6 @@ class CheckoutViewModel : ViewModel() {
     private fun initializeCheckout() {
         val sessionItems = CheckoutSessionHolder.consumeItems()
 
-        val defaultMockAddress = Address(
-            addressId = "addr_default",
-            receiverName = "Vương Khắc Hoàn",
-            phone = "0987654321",
-            province = "Thành phố Hà Nội",
-            district = "",
-            ward = "Xã Đông Anh",
-            detail = "Số nhà 83, Thôn Lại Đà",
-            isDefault = true
-        )
-
         val fallbackItems = listOf(
             OrderItem(
                 itemId = "item_1",
@@ -66,23 +55,134 @@ class CheckoutViewModel : ViewModel() {
             )
         )
 
+        val now = com.google.firebase.Timestamp.now()
+        val oneMonthLater = com.google.firebase.Timestamp(java.util.Date(System.currentTimeMillis() + 30L * 24 * 3600 * 1000))
+        val yesterday = com.google.firebase.Timestamp(java.util.Date(System.currentTimeMillis() - 24L * 3600 * 1000))
+        val oneMonthAgo = com.google.firebase.Timestamp(java.util.Date(System.currentTimeMillis() - 30L * 24 * 3600 * 1000))
+        val twoMonthsLater = com.google.firebase.Timestamp(java.util.Date(System.currentTimeMillis() + 60L * 24 * 3600 * 1000))
+
         val fallbackVouchers = listOf(
             Voucher(
                 voucherId = "vc_sole200",
                 code = "SOLE200",
-                description = "Giảm 200.000₫",
-                discountType = "AMOUNT",
+                name = "Khuyến mãi SoleSense 200K",
+                description = "Giảm trực tiếp 200.000₫ cho đơn từ 1.000.000₫",
+                discountType = "FIXED",
                 discountValue = 200000.0,
-                minOrderValue = 1000000.0
+                minOrderValue = 1000000.0,
+                scope = "ALL",
+                targetAudience = "ALL",
+                usageLimit = 100,
+                usedCount = 15,
+                startAt = now,
+                endAt = oneMonthLater,
+                isEnabled = true
             ),
             Voucher(
                 voucherId = "vc_sole10",
                 code = "SOLE10",
-                description = "Giảm 10% tối đa 300.000₫",
+                name = "Ưu đãi thành viên 10%",
+                description = "Giảm 10% tối đa 300.000₫ cho đơn từ 1.000.000₫",
                 discountType = "PERCENT",
                 discountValue = 10.0,
-                maxDiscount = 300000.0,
-                minOrderValue = 2000000.0
+                maxDiscountAmount = 300000.0,
+                minOrderValue = 1000000.0,
+                scope = "ALL",
+                targetAudience = "ALL",
+                usageLimit = 150,
+                usedCount = 18,
+                startAt = now,
+                endAt = oneMonthLater,
+                isEnabled = true
+            ),
+            Voucher(
+                voucherId = "vc_freeship",
+                code = "FREESHIP",
+                name = "Miễn phí vận chuyển",
+                description = "Miễn phí vận chuyển toàn quốc (giảm 30.000₫)",
+                discountType = "FREE_SHIPPING",
+                discountValue = 30000.0,
+                maxDiscountAmount = 30000.0,
+                minOrderValue = 200000.0,
+                scope = "ALL",
+                targetAudience = "ALL",
+                usageLimit = 500,
+                usedCount = 65,
+                startAt = now,
+                endAt = oneMonthLater,
+                isEnabled = true
+            ),
+            Voucher(
+                voucherId = "vc_expired2025",
+                code = "EXPIRED2025",
+                name = "Khuyến mãi đã hết hạn",
+                description = "Giảm 500.000₫ cho đơn từ 1.000.000₫ (Đã hết hạn)",
+                discountType = "FIXED",
+                discountValue = 500000.0,
+                minOrderValue = 1000000.0,
+                scope = "ALL",
+                targetAudience = "ALL",
+                startAt = oneMonthAgo,
+                endAt = yesterday,
+                isEnabled = true
+            ),
+            Voucher(
+                voucherId = "vc_hethan50k",
+                code = "HETHAN50K",
+                name = "Tri ân cuối tuần (Hết hạn)",
+                description = "Giảm 50.000₫ (Đã hết hạn)",
+                discountType = "FIXED",
+                discountValue = 50000.0,
+                minOrderValue = 200000.0,
+                scope = "ALL",
+                targetAudience = "ALL",
+                startAt = oneMonthAgo,
+                endAt = yesterday,
+                isEnabled = true
+            ),
+            Voucher(
+                voucherId = "vc_newyear2027",
+                code = "NEWYEAR2027",
+                name = "Khuyến mãi Năm Mới 2027",
+                description = "Giảm 300.000₫ (Chưa bắt đầu)",
+                discountType = "FIXED",
+                discountValue = 300000.0,
+                minOrderValue = 2000000.0,
+                scope = "ALL",
+                targetAudience = "ALL",
+                startAt = oneMonthLater,
+                endAt = twoMonthsLater,
+                isEnabled = true
+            ),
+            Voucher(
+                voucherId = "vc_soldout99",
+                code = "SOLDOUT99",
+                name = "Flash Sale 100K Chớp Nhoáng",
+                description = "Giảm 100.000₫ (Đã hết lượt sử dụng)",
+                discountType = "FIXED",
+                discountValue = 100000.0,
+                minOrderValue = 500000.0,
+                scope = "ALL",
+                targetAudience = "ALL",
+                usageLimit = 50,
+                usedCount = 50,
+                startAt = now,
+                endAt = oneMonthLater,
+                isEnabled = true
+            ),
+            Voucher(
+                voucherId = "vc_vip1trieu",
+                code = "VIP1TRIEU",
+                name = "Vip Diamond Giảm 1 Triệu",
+                description = "Giảm 1.000.000₫ cho đơn từ 10.000.000₫",
+                discountType = "FIXED",
+                discountValue = 1000000.0,
+                minOrderValue = 10000000.0,
+                scope = "ALL",
+                targetAudience = "ALL",
+                startAt = now,
+                endAt = oneMonthLater,
+                isEnabled = true
             )
         )
 
@@ -105,10 +205,10 @@ class CheckoutViewModel : ViewModel() {
 
         _uiState.update {
             it.copy(
-                selectedAddress = defaultMockAddress,
+                selectedAddress = null, // Mặc định chưa có địa chỉ giả cho tài khoản mới
                 items = activeItems,
                 availableVouchers = fallbackVouchers,
-                appliedVoucher = fallbackVouchers.first(),
+                appliedVoucher = null, // Mặc định không auto-apply mã khi chưa kiểm duyệt
                 shippingMethods = shippingMethods,
                 selectedShippingMethod = shippingMethods.first(),
                 selectedPaymentMethod = PaymentMethodType.QR_CODE
@@ -116,19 +216,59 @@ class CheckoutViewModel : ViewModel() {
         }
         recalculateTotals()
 
-        // Đồng bộ địa chỉ và voucher thực tế từ Firestore
+        // Đồng bộ địa chỉ thật của người dùng, giỏ hàng (nếu session trống) và voucher thực tế từ Firestore
         viewModelScope.launch {
+            if (sessionItems.isEmpty()) {
+                cartRepository.getCartItems().onSuccess { dbCartItems ->
+                    if (dbCartItems.isNotEmpty()) {
+                        val recovered = dbCartItems.map { ci ->
+                            OrderItem(
+                                itemId = ci.itemId,
+                                productId = ci.productId,
+                                variantId = ci.variantId,
+                                skuSnapshot = ci.variantId,
+                                productName = ci.productName,
+                                imageSnapshot = ci.imageUrl,
+                                size = ci.size,
+                                color = ci.color,
+                                unitPrice = ci.unitPrice,
+                                quantity = ci.quantity,
+                                subtotal = ci.unitPrice * ci.quantity
+                            )
+                        }
+                        _uiState.update { it.copy(items = recovered) }
+                        recalculateTotals()
+                    }
+                }
+            }
             addressRepository.getDefaultAddress().onSuccess { dbAddress ->
-                if (dbAddress != null) {
+                if (dbAddress != null && dbAddress.receiverName.isNotBlank() && dbAddress.phone.isNotBlank()) {
                     _uiState.update { it.copy(selectedAddress = dbAddress) }
+                } else {
+                    // Kiểm tra thông tin mặc định từ hồ sơ người dùng nếu đã hoàn thiện hồ sơ
+                    val currentUser = com.example.solesense.utils.UserSessionManager.currentUser.value
+                    val userPhone = currentUser?.phone
+                    val userAddress = currentUser?.defaultAddress
+                    if (currentUser != null && !userPhone.isNullOrBlank() && !userAddress.isNullOrBlank()) {
+                        val profileAddr = Address(
+                            addressId = "profile_default",
+                            receiverName = currentUser.fullName,
+                            phone = userPhone,
+                            province = "",
+                            district = "",
+                            ward = "",
+                            detail = userAddress,
+                            isDefault = true
+                        )
+                        _uiState.update { it.copy(selectedAddress = profileAddr) }
+                    }
                 }
             }
             voucherRepository.getActiveVouchers().onSuccess { dbVouchers ->
                 if (dbVouchers.isNotEmpty()) {
                     _uiState.update {
                         it.copy(
-                            availableVouchers = dbVouchers,
-                            appliedVoucher = dbVouchers.first()
+                            availableVouchers = dbVouchers
                         )
                     }
                     recalculateTotals()
@@ -152,15 +292,28 @@ class CheckoutViewModel : ViewModel() {
                 isAddressSheetVisible = false
             )
         }
+        viewModelScope.launch {
+            addressRepository.saveAddress(address.copy(isDefault = true)).onSuccess { saved ->
+                _uiState.update { it.copy(selectedAddress = saved) }
+            }
+        }
     }
 
     fun refreshDefaultAddress() {
         viewModelScope.launch {
             addressRepository.getDefaultAddress().onSuccess { dbAddress ->
-                if (dbAddress != null) {
-                    _uiState.update { it.copy(selectedAddress = dbAddress) }
-                }
+                _uiState.update { it.copy(selectedAddress = dbAddress) }
             }
+        }
+    }
+
+    private suspend fun removePurchasedItemsFromCart(purchasedItems: List<OrderItem>) {
+        val idsToRemove = purchasedItems
+            .flatMap { listOf(it.itemId, it.variantId) }
+            .filter { it.isNotBlank() }
+            .toSet()
+        if (idsToRemove.isNotEmpty()) {
+            cartRepository.removeMultipleCartItems(idsToRemove)
         }
     }
 
@@ -173,43 +326,78 @@ class CheckoutViewModel : ViewModel() {
         }
     }
 
-    fun applyVoucherCode() {
-        val code = _uiState.value.voucherInput.trim().uppercase()
+    fun openVoucherSheet() {
+        _uiState.update { it.copy(isVoucherSheetVisible = true) }
+    }
+
+    fun closeVoucherSheet() {
+        _uiState.update { it.copy(isVoucherSheetVisible = false) }
+    }
+
+    fun applyVoucherCode(customCode: String? = null) {
+        val code = (customCode ?: _uiState.value.voucherInput).trim().uppercase()
         if (code.isEmpty()) return
 
-        val matchedVoucher = _uiState.value.availableVouchers.find {
-            it.code.equals(code, ignoreCase = true)
+        viewModelScope.launch {
+            val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+            when (val result = voucherRepository.validateVoucher(
+                voucherCodeOrVoucher = code,
+                cartItems = _uiState.value.items,
+                userId = userId
+            )) {
+                is com.example.solesense.repository.VoucherValidationResult.Valid -> {
+                    _uiState.update {
+                        it.copy(
+                            appliedVoucher = result.voucher,
+                            voucherInput = "",
+                            voucherError = null,
+                            isVoucherSheetVisible = false
+                        )
+                    }
+                    recalculateTotals()
+                }
+                is com.example.solesense.repository.VoucherValidationResult.Invalid -> {
+                    _uiState.update {
+                        it.copy(
+                            appliedVoucher = if (it.appliedVoucher?.code.equals(code, ignoreCase = true)) null else it.appliedVoucher,
+                            voucherError = result.reason
+                        )
+                    }
+                    recalculateTotals()
+                }
+            }
         }
-
-        if (matchedVoucher == null) {
-            _uiState.update { it.copy(voucherError = "Mã voucher không hợp lệ hoặc đã hết hạn") }
-            return
-        }
-
-        val currentSubtotal = _uiState.value.items.sumOf { it.unitPrice * it.quantity }
-        if (currentSubtotal < matchedVoucher.minOrderValue) {
-            _uiState.update { it.copy(voucherError = "Đơn hàng chưa đạt giá trị tối thiểu để áp dụng mã") }
-            return
-        }
-
-        _uiState.update {
-            it.copy(
-                appliedVoucher = matchedVoucher,
-                voucherInput = "",
-                voucherError = null
-            )
-        }
-        recalculateTotals()
     }
 
     fun selectVoucher(voucher: Voucher) {
-        _uiState.update {
-            it.copy(
-                appliedVoucher = voucher,
-                voucherError = null
-            )
+        viewModelScope.launch {
+            val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+            when (val result = voucherRepository.validateVoucher(
+                voucherCodeOrVoucher = voucher,
+                cartItems = _uiState.value.items,
+                userId = userId
+            )) {
+                is com.example.solesense.repository.VoucherValidationResult.Valid -> {
+                    _uiState.update {
+                        it.copy(
+                            appliedVoucher = result.voucher,
+                            voucherError = null,
+                            isVoucherSheetVisible = false
+                        )
+                    }
+                    recalculateTotals()
+                }
+                is com.example.solesense.repository.VoucherValidationResult.Invalid -> {
+                    _uiState.update {
+                        it.copy(
+                            appliedVoucher = if (it.appliedVoucher?.voucherId == voucher.voucherId) null else it.appliedVoucher,
+                            voucherError = result.reason
+                        )
+                    }
+                    recalculateTotals()
+                }
+            }
         }
-        recalculateTotals()
     }
 
     fun removeAppliedVoucher() {
@@ -222,9 +410,20 @@ class CheckoutViewModel : ViewModel() {
         recalculateTotals()
     }
 
+    fun openShippingMethodSheet() {
+        _uiState.update { it.copy(isShippingMethodSheetVisible = true) }
+    }
+
+    fun closeShippingMethodSheet() {
+        _uiState.update { it.copy(isShippingMethodSheetVisible = false) }
+    }
+
     fun selectShippingMethod(method: ShippingMethodUiModel) {
         _uiState.update {
-            it.copy(selectedShippingMethod = method)
+            it.copy(
+                selectedShippingMethod = method,
+                isShippingMethodSheetVisible = false
+            )
         }
         recalculateTotals()
     }
@@ -251,8 +450,14 @@ class CheckoutViewModel : ViewModel() {
     ) {
         val state = _uiState.value
         val address = state.selectedAddress
-        if (address == null) {
-            onError("Vui lòng chọn địa chỉ nhận hàng")
+        val isAddressValid = address != null &&
+                address.receiverName.isNotBlank() &&
+                address.phone.isNotBlank() &&
+                (address.detail.isNotBlank() || address.province.isNotBlank())
+
+        if (!isAddressValid || address == null) {
+            _uiState.update { it.copy(isAddressSheetVisible = true) }
+            onError("Bắt buộc phải nhập đầy đủ Họ tên, Số điện thoại và Địa chỉ nhận hàng trước khi đặt hàng!")
             return
         }
         if (state.items.isEmpty() || state.isSubmittingOrder) return
@@ -260,23 +465,75 @@ class CheckoutViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmittingOrder = true, errorMessage = null) }
 
+            val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+                ?: com.example.solesense.utils.UserSessionManager.getActiveUserId()
+
+            // Kiểm tra lại Voucher lần cuối ngay tại thời điểm bấm Đặt hàng
+            val currentVoucher = _uiState.value.appliedVoucher
+            if (currentVoucher != null) {
+                when (val vRes = voucherRepository.validateVoucher(
+                    voucherCodeOrVoucher = currentVoucher,
+                    cartItems = _uiState.value.items,
+                    userId = uid
+                )) {
+                    is com.example.solesense.repository.VoucherValidationResult.Invalid -> {
+                        _uiState.update {
+                            it.copy(
+                                isSubmittingOrder = false,
+                                appliedVoucher = null,
+                                voucherError = vRes.reason
+                            )
+                        }
+                        recalculateTotals()
+                        onError("Mã giảm giá không còn hợp lệ: ${vRes.reason}")
+                        return@launch
+                    }
+                    is com.example.solesense.repository.VoucherValidationResult.Valid -> {
+                        // Hợp lệ, tiếp tục tạo đơn
+                    }
+                }
+            }
+
+            val freshState = _uiState.value
             val result = orderRepository.createOrderWithTransaction(
-                items = state.items,
-                subtotal = state.subtotal,
-                shippingFee = state.shippingFee,
-                voucherId = state.appliedVoucher?.voucherId,
-                discount = state.discountAmount,
-                totalAmount = state.totalAmount,
+                items = freshState.items,
+                subtotal = freshState.subtotal,
+                shippingFee = freshState.shippingFee,
+                voucherId = freshState.appliedVoucher?.voucherId,
+                discount = freshState.discountAmount,
+                totalAmount = freshState.totalAmount,
                 receiverName = address.receiverName,
                 receiverPhone = address.phone,
                 shippingAddress = address.toFullSingleLineAddress(),
-                note = state.orderNote,
-                paymentMethod = state.selectedPaymentMethod.code
+                note = freshState.orderNote,
+                paymentMethod = freshState.selectedPaymentMethod.code
             )
 
             result.fold(
                 onSuccess = { created ->
-                    if (state.selectedPaymentMethod == PaymentMethodType.QR_CODE && created.payment != null) {
+                    // CHỈ ghi nhận lịch sử sử dụng voucher ngay nếu là COD.
+                    // Nếu là QR_CODE thì chỉ tạm giữ chỗ (reservedCount), khi thanh toán QR thành công mới ghi voucherUsages!
+                    if (freshState.selectedPaymentMethod != PaymentMethodType.QR_CODE &&
+                        !uid.isNullOrBlank() && freshState.appliedVoucher != null
+                    ) {
+                        voucherRepository.recordVoucherUsage(
+                            userId = uid,
+                            voucherId = freshState.appliedVoucher.voucherId,
+                            code = freshState.appliedVoucher.code,
+                            orderId = created.order.orderId,
+                            discountAmount = freshState.discountAmount
+                        )
+                    }
+
+                    // Tạo thông báo đặt hàng tự động
+                    try {
+                        com.example.solesense.repository.NotificationRepository().notifyOrderCreated(
+                            order = created.order,
+                            isQrPayment = freshState.selectedPaymentMethod == PaymentMethodType.QR_CODE
+                        )
+                    } catch (_: Exception) {}
+
+                    if (freshState.selectedPaymentMethod == PaymentMethodType.QR_CODE && created.payment != null) {
                         // Tính mốc thời gian hết hạn thực tế (5 phút = 300.000ms)
                         val expireAtMillis = created.payment.expiresAt?.toDate()?.time
                             ?: (System.currentTimeMillis() + OrderRepository.QR_HOLD_DURATION_SECONDS * 1000L)
@@ -300,15 +557,16 @@ class CheckoutViewModel : ViewModel() {
                             onOrderCompleted = onOrderCompleted
                         )
                     } else {
-                        // Đặt hàng COD thành công ngay
-                        cartRepository.clearCart()
+                        // Đặt hàng COD thành công: chỉ xóa đúng các sản phẩm đã mua khỏi giỏ hàng & mở màn hình Đặt hàng thành công
+                        removePurchasedItemsFromCart(freshState.items)
+                        CheckoutSessionHolder.clearSession()
                         _uiState.update {
                             it.copy(
                                 isSubmittingOrder = false,
-                                isOrderSuccess = true
+                                isOrderSuccess = true,
+                                completedOrder = created.order
                             )
                         }
-                        onOrderCompleted("Đặt hàng thành công (#${created.order.orderCode})!")
                     }
                 },
                 onFailure = { e ->
@@ -362,8 +620,26 @@ class CheckoutViewModel : ViewModel() {
             orderRepository.observePaymentStatus(paymentId).collect { payment ->
                 if (payment?.status == "SUCCESS" && _uiState.value.activePayment != null && !_uiState.value.isQrExpired) {
                     qrCountdownJob?.cancel()
-                    cartRepository.clearCart()
-                    val orderCode = _uiState.value.activeOrder?.orderCode ?: ""
+                    removePurchasedItemsFromCart(_uiState.value.items)
+                    CheckoutSessionHolder.clearSession()
+                    val activeOrder = _uiState.value.activeOrder
+                    val appliedVoucher = _uiState.value.appliedVoucher
+                    val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+                        ?: com.example.solesense.utils.UserSessionManager.getActiveUserId()
+                    if (!uid.isNullOrBlank() && appliedVoucher != null && activeOrder != null) {
+                        voucherRepository.recordVoucherUsage(
+                            userId = uid,
+                            voucherId = appliedVoucher.voucherId,
+                            code = appliedVoucher.code,
+                            orderId = activeOrder.orderId,
+                            discountAmount = _uiState.value.discountAmount
+                        )
+                    }
+                    if (activeOrder != null) {
+                        try {
+                            com.example.solesense.repository.NotificationRepository().notifyQrPaymentSuccess(activeOrder)
+                        } catch (_: Exception) {}
+                    }
                     _uiState.update {
                         it.copy(
                             activeOrder = null,
@@ -371,10 +647,13 @@ class CheckoutViewModel : ViewModel() {
                             isQrExpired = false,
                             qrExpireAtMillis = 0L,
                             isProcessingQrAction = false,
-                            isOrderSuccess = true
+                            isOrderSuccess = true,
+                            completedOrder = activeOrder?.copy(
+                                paymentStatus = "SUCCESS",
+                                orderStatus = "CONFIRMED"
+                            )
                         )
                     }
-                    onOrderCompleted("Thanh toán VietQR thành công (#$orderCode)!")
                 }
             }
         }
@@ -411,6 +690,7 @@ class CheckoutViewModel : ViewModel() {
         paymentListenerJob?.cancel()
 
         val itemsToRelease = _uiState.value.items
+        val expiredOrder = _uiState.value.activeOrder
 
         // Đổi giao diện ngay sang trạng thái Đã hết hạn (00:00 + ic_time_expire)
         _uiState.update {
@@ -429,6 +709,14 @@ class CheckoutViewModel : ViewModel() {
                 items = itemsToRelease,
                 reason = "Quá hạn thanh toán QR 5 phút - Tự động giải phóng đơn hàng tạm giữ"
             )
+            if (expiredOrder != null) {
+                try {
+                    com.example.solesense.repository.NotificationRepository().notifyOrderCancelled(
+                        order = expiredOrder,
+                        reason = "Đơn hàng #${expiredOrder.orderCode} đã tự động hủy do hết thời gian thanh toán QR (5 phút)."
+                    )
+                } catch (_: Exception) {}
+            }
         }
     }
 
@@ -472,7 +760,22 @@ class CheckoutViewModel : ViewModel() {
                 onSuccess = {
                     qrCountdownJob?.cancel()
                     paymentListenerJob?.cancel()
-                    cartRepository.clearCart()
+                    removePurchasedItemsFromCart(state.items)
+                    CheckoutSessionHolder.clearSession()
+                    val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+                        ?: com.example.solesense.utils.UserSessionManager.getActiveUserId()
+                    if (!uid.isNullOrBlank() && state.appliedVoucher != null) {
+                        voucherRepository.recordVoucherUsage(
+                            userId = uid,
+                            voucherId = state.appliedVoucher.voucherId,
+                            code = state.appliedVoucher.code,
+                            orderId = order.orderId,
+                            discountAmount = state.discountAmount
+                        )
+                    }
+                    try {
+                        com.example.solesense.repository.NotificationRepository().notifyQrPaymentSuccess(order)
+                    } catch (_: Exception) {}
                     _uiState.update {
                         it.copy(
                             isProcessingQrAction = false,
@@ -480,10 +783,13 @@ class CheckoutViewModel : ViewModel() {
                             activePayment = null,
                             isQrExpired = false,
                             qrExpireAtMillis = 0L,
-                            isOrderSuccess = true
+                            isOrderSuccess = true,
+                            completedOrder = order.copy(
+                                paymentStatus = "SUCCESS",
+                                orderStatus = "CONFIRMED"
+                            )
                         )
                     }
-                    onOrderCompleted("Thanh toán VietQR thành công (#${order.orderCode})!")
                 },
                 onFailure = { e ->
                     _uiState.update { it.copy(isProcessingQrAction = false) }
@@ -531,27 +837,21 @@ class CheckoutViewModel : ViewModel() {
             val shippingFee = state.selectedShippingMethod?.fee ?: 0.0
             val voucher = state.appliedVoucher
 
-            val discount = if (voucher != null && subtotal >= voucher.minOrderValue) {
-                when (voucher.discountType.uppercase()) {
-                    "PERCENT" -> {
-                        val rawDiscount = subtotal * (voucher.discountValue / 100.0)
-                        if (voucher.maxDiscount != null && voucher.maxDiscount > 0) {
-                            min(rawDiscount, voucher.maxDiscount)
-                        } else {
-                            rawDiscount
-                        }
-                    }
-                    else -> voucher.discountValue
-                }
-            } else {
-                0.0
-            }
+            // Voucher chỉ có hiệu lực khi:
+            // 1. Trạng thái thực tế là "ACTIVE" (chưa hết hạn, đã bắt đầu, chưa hết lượt, isEnabled = true)
+            // 2. Giá trị đơn hàng phải đạt tối thiểu minOrderValue
+            val isVoucherValid = voucher != null &&
+                    voucher.calculateStatus() == "ACTIVE" &&
+                    subtotal >= voucher.minOrderValue
 
+            val effectiveVoucher = if (isVoucherValid) voucher else null
+            val discount = effectiveVoucher?.calculateDiscountAmount(subtotal) ?: 0.0
             val total = max(0.0, subtotal + shippingFee - discount)
 
             state.copy(
                 subtotal = subtotal,
                 shippingFee = shippingFee,
+                appliedVoucher = effectiveVoucher,
                 discountAmount = discount,
                 totalAmount = total
             )

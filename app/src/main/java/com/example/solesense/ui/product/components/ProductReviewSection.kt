@@ -37,7 +37,9 @@ data class ReviewUiModel(
     val rating: Int,
     val date: String,
     val content: String,
-    val variantInfo: String
+    val variantInfo: String,
+    val imageUrls: List<String> = emptyList(),
+    val storeReply: String? = null
 )
 
 @Composable
@@ -98,8 +100,9 @@ fun ProductReviewSection(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 2. Danh sách Preview các đánh giá (Hiển thị tối đa 2 cái)
-        reviews.take(2).forEach { review ->
+        // 2. Danh sách các đánh giá (Mặc định hiển thị 2 đánh giá đầu, khi mở rộng hiển thị toàn bộ)
+        val displayedReviews = if (isExpanded) reviews else reviews.take(2)
+        displayedReviews.forEach { review ->
             ReviewItem(review = review)
             Spacer(modifier = Modifier.height(16.dp))
         }

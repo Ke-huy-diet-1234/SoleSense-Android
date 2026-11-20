@@ -75,50 +75,60 @@ fun ProductSummarySection(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // 2. Cụm Giá và Số lượng đã bán
+        // 2. Cụm Giá và Số lượng đã bán (Đã fix lỗi tràn ngang làm chữ "Đã bán" bị ép dọc)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Nhóm Giá bán
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // Nhóm Giá bán chiếm weight(1f) để nhường không gian cố định cho "Đã bán"
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 12.dp)
             ) {
-                // Giá hiện tại (Màu đỏ, to, in đậm)
                 Text(
                     text = priceString,
                     style = MaterialTheme.typography.headlineMedium.copy(
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFE53935),
-                        fontSize = 22.sp,
+                        fontSize = 21.sp,
                         lineHeight = 26.sp
                     )
                 )
 
                 // Giá gốc gạch ngang (Chỉ hiển thị nếu có giá gốc và giá gốc > giá bán)
                 if (displayOriginalPrice != null && displayOriginalPrice > displayPrice) {
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = currencyFormatter.format(displayOriginalPrice),
                         style = MaterialTheme.typography.bodyMedium.copy(
                             color = Color.Gray,
                             textDecoration = TextDecoration.LineThrough,
                             fontSize = 14.sp,
-                            lineHeight = 20.sp
+                            lineHeight = 18.sp
                         )
                     )
                 }
             }
 
-            // Lượt bán (vd: "Đã bán 1,2k")
-            Text(
-                text = "Đã bán ${formatSoldCount(soldCount)}",
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    color = Color.DarkGray,
-                    lineHeight = 20.sp
+            // Lượt bán (vd: "Đã bán 120") - Luôn nằm gọn trên 1 dòng
+            Box(
+                modifier = Modifier
+                    .background(Color(0xFFF5F5F7), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+            ) {
+                Text(
+                    text = "Đã bán ${formatSoldCount(soldCount)}",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = Color(0xFF424242),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp
+                    ),
+                    maxLines = 1,
+                    softWrap = false
                 )
-            )
+            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))

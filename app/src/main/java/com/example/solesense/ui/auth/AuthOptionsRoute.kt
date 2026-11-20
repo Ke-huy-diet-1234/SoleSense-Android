@@ -137,10 +137,10 @@ fun AuthOptionsRoute(
                 } catch (e: GetCredentialCancellationException) {
                     Log.d(TAG, "Người dùng đã huỷ chọn tài khoản Google: ${e.message}")
                 } catch (e: NoCredentialException) {
-                    Log.e(TAG, "Không tìm thấy tài khoản Google hoặc chưa cấu hình SHA-1 trên Firebase Console", e)
+                    Log.e(TAG, "Không tìm thấy tài khoản Google trong không gian này hoặc chưa cấu hình SHA-1", e)
                     Toast.makeText(
                         context,
-                        "Không tìm thấy tài khoản Google hoặc chưa cấu hình SHA-1 trên Firebase",
+                        "Không tìm thấy tài khoản Google (ở ứng dụng nhân bản, hãy dùng Đăng nhập Email hoặc bật Dịch vụ Google cho Ứng dụng kép)",
                         Toast.LENGTH_LONG
                     ).show()
                 } catch (e: Exception) {

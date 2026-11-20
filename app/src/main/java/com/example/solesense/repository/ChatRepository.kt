@@ -317,46 +317,66 @@ class ChatRepository(
                 verifiedProductContextNote = verifiedProductContextNote
             )
 
+            val normalizedQuery = userMessage.content.trim().lowercase(Locale.getDefault())
+            val isEndingConversation = normalizedQuery.contains("kết thúc") ||
+                normalizedQuery.contains("tạm biệt") ||
+                normalizedQuery == "bye" ||
+                normalizedQuery.startsWith("bye ") ||
+                normalizedQuery.contains("dừng trò chuyện") ||
+                normalizedQuery.contains("xong rồi") ||
+                normalizedQuery.contains("không hỏi nữa")
+
             var parsedReply = ""
             val recommendedIds = mutableListOf<String>()
             val reasonsMap = mutableMapOf<String, String>()
             val explanationsMap = mutableMapOf<String, List<String>>()
             val questionsList = mutableListOf<String>()
 
-            // 4. Gọi Gemini qua Firebase AI Logic (Sử dụng model mới nhất gemini-2.5-flash, dự phòng gemini-2.0-flash)
-            val rawGeminiOutput = callGeminiWithFallbackModels(
-                systemInstructionText = systemInstructionText,
-                promptText = userPromptText
-            )
-
-            if (!rawGeminiOutput.isNullOrBlank()) {
-                val parseSuccess = parseStructuredAiOutput(
-                    rawOutput = rawGeminiOutput,
-                    validProducts = allProducts,
-                    catalog = catalog,
-                    outReply = { parsedReply = it },
-                    recommendedIds = recommendedIds,
-                    reasonsMap = reasonsMap,
-                    explanationsMap = explanationsMap,
-                    questionsList = questionsList
+            if (isEndingConversation) {
+                parsedReply = "Cảm ơn bạn đã trò chuyện cùng **SoleSense AI**! Chúc bạn một ngày thật nhiều niềm vui và chọn được đôi giày ưng ý nhất. 👟✨\n\nBạn có hài lòng với phần tư vấn vừa rồi của mình không? Hãy bấm chọn số sao bên dưới để đánh giá cho vui nhé!"
+                questionsList.addAll(
+                    listOf(
+                        "Bắt đầu cuộc trò chuyện mới",
+                        "Xem giày chạy bộ bán chạy",
+                        "Kiểm tra mã giảm giá"
+                    )
                 )
-                if (!parseSuccess || parsedReply.isBlank()) {
-                    parsedReply = rawGeminiOutput.trim()
+            } else {
+                // 4. Gọi Gemini qua Firebase AI Logic (Sử dụng model mới nhất gemini-2.5-flash, dự phòng gemini-2.0-flash)
+                val rawGeminiOutput = callGeminiWithFallbackModels(
+                    systemInstructionText = systemInstructionText,
+                    promptText = userPromptText
+                )
+
+                if (!rawGeminiOutput.isNullOrBlank()) {
+                    val parseSuccess = parseStructuredAiOutput(
+                        rawOutput = rawGeminiOutput,
+                        validProducts = allProducts,
+                        catalog = catalog,
+                        outReply = { parsedReply = it },
+                        recommendedIds = recommendedIds,
+                        reasonsMap = reasonsMap,
+                        explanationsMap = explanationsMap,
+                        questionsList = questionsList
+                    )
+                    if (!parseSuccess || parsedReply.isBlank()) {
+                        parsedReply = rawGeminiOutput.trim()
+                    }
                 }
-            }
 
-            // Nếu Gemini không phản hồi được (do cấu hình API trên Firebase Console hoặc mạng),
-            // sử dụng Bộ phân tích Danh mục Thông minh (Smart Catalog Analyzer) truy vấn trực tiếp trên dữ liệu thật
-            if (parsedReply.isBlank()) {
-                parsedReply = generateSmartCatalogResponse(
-                    userMessage = userMessage,
-                    catalog = catalog,
-                    verifiedProductContextNote = verifiedProductContextNote,
-                    recommendedIds = recommendedIds,
-                    reasonsMap = reasonsMap,
-                    explanationsMap = explanationsMap,
-                    questionsList = questionsList
-                )
+                // Nếu Gemini không phản hồi được (do cấu hình API trên Firebase Console hoặc mạng),
+                // sử dụng Bộ phân tích Danh mục Thông minh (Smart Catalog Analyzer) truy vấn trực tiếp trên dữ liệu thật
+                if (parsedReply.isBlank()) {
+                    parsedReply = generateSmartCatalogResponse(
+                        userMessage = userMessage,
+                        catalog = catalog,
+                        verifiedProductContextNote = verifiedProductContextNote,
+                        recommendedIds = recommendedIds,
+                        reasonsMap = reasonsMap,
+                        explanationsMap = explanationsMap,
+                        questionsList = questionsList
+                    )
+                }
             }
 
             // 5. Hậu kiểm (Post-validation):
@@ -396,6 +416,7 @@ class ChatRepository(
                 mapOf(
                     "content" to parsedReply,
                     "sendStatus" to "COMPLETED",
+                    "eventCode" to if (isEndingConversation) "AI_ENDED_RATING" else null,
                     "recommendedProductIds" to recommendedIds,
                     "recommendationReasons" to reasonsMap,
                     "recommendationExplanations" to explanationsMap,
@@ -433,13 +454,14 @@ class ChatRepository(
     }
 
     /**
-     * Gọi Firebase AI Logic với danh sách model chuẩn mới nhất (gemini-2.5-flash -> gemini-2.0-flash)
+     * Gọi Firebase AI Logic với danh sách model chuẩn mới nhất (gemini-2.5-flash -> gemini-2.0-flash -> gemini-1.5-flash)
+     * và tự động thử cả GoogleAI lẫn VertexAI backend nếu project cấu hình 1 trong 2.
      */
     private suspend fun callGeminiWithFallbackModels(
         systemInstructionText: String,
         promptText: String
     ): String? {
-        val candidateModels = listOf("gemini-2.5-flash", "gemini-2.0-flash")
+        val candidateModels = listOf("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash")
         val firebaseAi = try {
             Firebase.ai(backend = GenerativeBackend.googleAI())
         } catch (e: Exception) {
@@ -930,8 +952,186 @@ class ChatRepository(
                 "Bạn đang ngắm mẫu giày nào để mình tính giá sau khi áp mã giúp bạn nhé?"
         }
 
-        // 8. TRƯỜNG HỢP CHÀO HỎI HOẶC CÂU HỎI CHUNG VỀ GIÀY CHẠY BỘ / SNEAKER
-        activeCatalog.forEach { item ->
+        // 8. TRƯỜNG HỢP BẮT ĐẦU CUỘC TRÒ CHUYỆN MỚI / CHÀO HỎI / LỜI CẢM ƠN
+        if (query.contains("bắt đầu cuộc trò chuyện mới") || query.contains("trò chuyện mới") || query.contains("bắt đầu lại")) {
+            questionsList.addAll(
+                listOf(
+                    "Shop hiện có bao nhiêu sản phẩm?",
+                    "Tư vấn giày chạy bộ tầm 3 triệu",
+                    "Sản phẩm nào đang có giá rẻ nhất?",
+                    "Chân dài 25.5cm mang size mấy?"
+                )
+            )
+            return "Chào mừng bạn quay lại! 👋 Mình đã sẵn sàng cho cuộc trò chuyện mới cùng bạn. Hôm nay bạn muốn kiểm tra **số lượng mẫu giày trong kho**, tìm giày theo **thương hiệu (Nike, Adidas, Asics, New Balance...)**, hay chọn theo **mức ngân sách** để mình tư vấn ngay nhé?"
+        }
+
+        if (query.contains("cảm ơn") || query.contains("thank") || query == "ok" || query == "oke") {
+            questionsList.addAll(
+                listOf(
+                    "Kết thúc cuộc trò chuyện",
+                    "Xem mã giảm giá hiện có",
+                    "Tư vấn thêm mẫu giày khác"
+                )
+            )
+            return "Không có gì đâu ạ! Rất vui vì đã hỗ trợ được bạn. 😊 Nếu bạn cần kiểm tra thêm size giày hay mã giảm giá nào thì cứ nhắn mình nhé, hoặc gõ **\"Kết thúc cuộc trò chuyện\"** để đánh giá trải nghiệm nha!"
+        }
+
+        if (query in setOf("alo", "hi", "hello", "chào", "xin chào", "chào shop", "ai đó")) {
+            questionsList.addAll(
+                listOf(
+                    "Shop hiện có bao nhiêu sản phẩm?",
+                    "Tư vấn giày chạy bộ êm chân",
+                    "Sản phẩm nào đang giảm giá sâu?",
+                    "Chân dài 25.5cm đi size mấy?"
+                )
+            )
+            return "Xin chào bạn! 👋 Mình là **SoleSense AI** – trợ lý tư vấn giày thể thao của bạn. Hôm nay bạn đang tìm giày để **chạy bộ, tập gym hay đi chơi hàng ngày** để mình lựa mẫu chuẩn nhất cho bạn nhé?"
+        }
+
+        // 9. TRƯỜNG HỢP KHÁCH HỎI SỐ LƯỢNG SẢN PHẨM / TỔNG QUAN KHO HÀNG / THƯƠNG HIỆU HIỆN CÓ
+        if (query.contains("bao nhiêu sản phẩm") ||
+            query.contains("mấy sản phẩm") ||
+            query.contains("bao nhiêu đôi") ||
+            query.contains("bao nhiêu mẫu") ||
+            query.contains("có những sản phẩm nào") ||
+            query.contains("danh sách sản phẩm") ||
+            query.contains("tất cả sản phẩm") ||
+            query.contains("có những hãng nào") ||
+            query.contains("bao nhiêu hãng") ||
+            query.contains("bao nhiêu thương hiệu") ||
+            query.contains("shop có gì") ||
+            query.contains("cửa hàng có")
+        ) {
+            val totalModels = activeCatalog.size
+            val totalStockPairs = activeCatalog.sumOf { it.product.totalStockQuantity }
+            val byBrand = activeCatalog.groupBy { it.product.brandId.uppercase() }
+            val brandSummary = byBrand.entries.joinToString("\n") { (bName, items) ->
+                val names = items.joinToString(", ") { it.product.name }
+                "• **$bName** (${items.size} mẫu): $names"
+            }
+            val minPrice = activeCatalog.minOfOrNull { it.product.salePrice ?: it.product.basePrice } ?: 0.0
+            val maxPrice = activeCatalog.maxOfOrNull { it.product.salePrice ?: it.product.basePrice } ?: 0.0
+
+            activeCatalog.take(4).forEach { item ->
+                val p = item.product
+                val price = p.salePrice ?: p.basePrice
+                recommendedIds.add(p.productId)
+                reasonsMap[p.productId] = "Nổi bật • ${formatVnd(price)}"
+                explanationsMap[p.productId] = buildDefaultExplanationsForProduct(p, catalog)
+            }
+
+            questionsList.addAll(
+                listOf(
+                    "Sản phẩm nào đang có giá rẻ nhất?",
+                    "Xem các mẫu giày Adidas",
+                    "Tư vấn giày chạy bộ tầm 3 triệu",
+                    "Chân dài 25.5cm mang size mấy?"
+                )
+            )
+
+            return "Hiện tại trên hệ thống **SoleSense** đang kinh doanh tổng cộng **$totalModels mẫu giày chính hãng** (với tổng tồn kho **$totalStockPairs đôi** sẵn sàng giao ngay), trải đều ở 6 thương hiệu lớn:\n\n" +
+                "$brandSummary\n\n" +
+                "💰 **Khoảng giá**: Từ **${formatVnd(minPrice)}** đến **${formatVnd(maxPrice)}**.\n" +
+                "Bạn muốn mình lọc chi tiết theo hãng nào hay theo nhu cầu chạy bộ / đi chơi?"
+        }
+
+        // 10. TRƯỜNG HỢP KHÁCH HỎI CỤ THỂ VỀ 1 MẪU GIÀY HOẶC THƯƠNG HIỆU (NIKE, ADIDAS, ASICS, NEW BALANCE, CONVERSE, PUMA)
+        val matchedByNameOrBrand = activeCatalog.filter { item ->
+            val p = item.product
+            val nameLow = p.name.lowercase(Locale.getDefault())
+            val brandLow = p.brandId.lowercase(Locale.getDefault())
+            query.contains(nameLow) ||
+                query.contains(brandLow) ||
+                (brandLow == "newbalance" && (query.contains("new balance") || query.contains("nb"))) ||
+                nameLow.split(" ").filter { it.length >= 4 }.any { token -> query.contains(token) }
+        }
+
+        if (matchedByNameOrBrand.isNotEmpty()) {
+            val sb = StringBuilder()
+            sb.appendLine("Mình tìm thấy **${matchedByNameOrBrand.size} mẫu giày** khớp với yêu cầu của bạn tại SoleSense:")
+            matchedByNameOrBrand.take(4).forEach { item ->
+                val p = item.product
+                val price = p.salePrice ?: p.basePrice
+                val sizes = item.variants.filter { it.stock > 0 && it.status == "ACTIVE" }
+                    .map { "${it.color} (Size ${it.size}: còn ${it.stock})" }
+                    .joinToString(", ")
+                recommendedIds.add(p.productId)
+                reasonsMap[p.productId] = "${p.brandId.uppercase()} • ${formatVnd(price)}"
+                explanationsMap[p.productId] = buildDefaultExplanationsForProduct(p, catalog)
+                sb.appendLine("• **${p.name}** – Giá: **${formatVnd(price)}** (Đánh giá ${p.rating}★, đã bán ${p.totalSoldCount} đôi).")
+                sb.appendLine("  + Công năng: ${p.purpose}. Đệm: ${p.cushioning ?: "Tiêu chuẩn"}.")
+                if (sizes.isNotEmpty()) {
+                    sb.appendLine("  + Biến thể còn hàng: $sizes.")
+                }
+            }
+            questionsList.addAll(
+                listOf(
+                    "Đôi nào đi êm chân nhất?",
+                    "Chân dài 25.5cm đi size mấy?",
+                    "Có mã giảm giá nào áp dụng được không?"
+                )
+            )
+            return sb.toString().trim()
+        }
+
+        // 11. TRƯỜNG HỢP KHÁCH HỎI THEO DANH MỤC / MỤC ĐÍCH SỬ DỤNG (CHẠY BỘ, ĐI HỌC, ĐI CHƠI, BÓNG RỔ, TẬP GYM, CHÂN BẸT, ÊM CHÂN)
+        val matchedByCategoryOrPurpose = activeCatalog.filter { item ->
+            val p = item.product
+            val catLow = p.categoryId.lowercase(Locale.getDefault())
+            val purposeLow = p.purpose.lowercase(Locale.getDefault())
+            val descLow = p.description.lowercase(Locale.getDefault())
+            (query.contains("chạy") && catLow == "running") ||
+                ((query.contains("đi chơi") || query.contains("đi học") || query.contains("thời trang") || query.contains("dạo phố")) && catLow == "lifestyle") ||
+                (query.contains("bóng rổ") && catLow == "basketball") ||
+                ((query.contains("tập") || query.contains("gym")) && (catLow == "training" || purposeLow.contains("tập"))) ||
+                (query.contains("chân bẹt") && (purposeLow.contains("chân bẹt") || descLow.contains("chân bẹt"))) ||
+                (query.contains("marathon") && (purposeLow.contains("marathon") || descLow.contains("marathon"))) ||
+                (query.contains("êm") && (descLow.contains("êm") || purposeLow.contains("êm")))
+        }
+
+        if (matchedByCategoryOrPurpose.isNotEmpty()) {
+            val sb = StringBuilder()
+            sb.appendLine("Dựa trên nhu cầu của bạn, mình đề xuất **${matchedByCategoryOrPurpose.size} mẫu giày** phù hợp nhất đang có sẵn:")
+            matchedByCategoryOrPurpose.take(4).forEach { item ->
+                val p = item.product
+                val price = p.salePrice ?: p.basePrice
+                recommendedIds.add(p.productId)
+                reasonsMap[p.productId] = "Đánh giá ${p.rating}★ • ${formatVnd(price)}"
+                explanationsMap[p.productId] = buildDefaultExplanationsForProduct(p, catalog)
+                sb.appendLine("• **${p.name}** (**${formatVnd(price)}**): ${p.purpose}, sử dụng đệm ${p.cushioning ?: "êm ái"}.")
+            }
+            questionsList.addAll(
+                listOf(
+                    "Trong các đôi này đôi nào rẻ nhất?",
+                    "So sánh 2 đôi đầu tiên",
+                    "Chân 25.5cm mang size mấy?"
+                )
+            )
+            return sb.toString().trim()
+        }
+
+        val isShoeOrStoreRelated = query.contains("giày") || query.contains("sneaker") || query.contains("chạy") ||
+            query.contains("nike") || query.contains("adidas") || query.contains("asics") ||
+            query.contains("puma") || query.contains("balance") || query.contains("converse") ||
+            query.contains("tư vấn") || query.contains("mẫu") || query.contains("sản phẩm") ||
+            query.contains("đôi") || query.contains("mua") || query.contains("giá") ||
+            query.contains("size") || query.contains("cỡ") || query.contains("màu") ||
+            query.contains("kho") || query.contains("hàng") || query.contains("shop")
+
+        if (!isShoeOrStoreRelated) {
+            questionsList.addAll(
+                listOf(
+                    "Shop hiện có bao nhiêu sản phẩm?",
+                    "Tư vấn giày chạy bộ tầm 3 triệu",
+                    "Sản phẩm nào đang bán chạy nhất?",
+                    "Kết thúc cuộc trò chuyện"
+                )
+            )
+            return "Câu chuyện của bạn thú vị thật đấy! 😄 Tuy mình là trợ lý AI chuyên về giày thể thao tại **SoleSense** nên những chủ đề ngoài lề mình chỉ biết chút xíu thôi, nhưng nếu bạn cần tìm một đôi giày thật êm để đi dạo, chạy bộ hay phối đồ cực chất thì mình luôn sẵn sàng 100%! Bạn có muốn mình gợi ý vài mẫu đang hot không?"
+        }
+
+        // 9. TRƯỜNG HỢP CÂU HỎI CHUNG VỀ GIÀY CHẠY BỘ / SNEAKER
+        activeCatalog.take(4).forEach { item ->
             val p = item.product
             val price = p.salePrice ?: p.basePrice
             recommendedIds.add(p.productId)
@@ -947,7 +1147,7 @@ class ChatRepository(
             )
         )
 
-        val summaryLines = activeCatalog.joinToString("\n") { item ->
+        val summaryLines = activeCatalog.take(4).joinToString("\n") { item ->
             val p = item.product
             val price = p.salePrice ?: p.basePrice
             "• **${p.name}** (${formatVnd(price)}): ${p.purpose}, trang bị đệm ${p.cushioning ?: "cao cấp"}."
@@ -1409,6 +1609,78 @@ class ChatRepository(
                 trySend(list)
             }
         awaitClose { listener.remove() }
+    }
+
+    /**
+     * Lắng nghe danh sách ticket đã hoàn tất (RESOLVED) cho Tab Lịch sử trên SupportDashboardScreen
+     */
+    fun getResolvedSupportRequestsFlow(): Flow<List<SupportRequest>> = callbackFlow {
+        val listener = db.collection("supportRequests")
+            .whereEqualTo("status", "RESOLVED")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                val list = snapshot?.toObjects(SupportRequest::class.java)
+                    ?.sortedByDescending { it.resolvedAt?.seconds ?: it.createdAt.seconds }
+                    ?: emptyList()
+                trySend(list)
+            }
+        awaitClose { listener.remove() }
+    }
+
+    /**
+     * Nhân viên bàn giao / trả cuộc hội thoại về lại hàng chờ WAITING cho nhân viên khác tiếp nhận
+     */
+    suspend fun staffReleaseTicketToWaiting(
+        requestId: String,
+        chatId: String,
+        staffName: String
+    ): Result<Unit> {
+        return try {
+            val now = Timestamp.now()
+            val batch = db.batch()
+            if (requestId.isNotBlank()) {
+                val reqRef = db.collection("supportRequests").document(requestId)
+                batch.update(
+                    reqRef,
+                    mapOf(
+                        "status" to "WAITING",
+                        "assignedStaffId" to null,
+                        "assignedStaffName" to null,
+                        "lastStaffActivityAt" to now
+                    )
+                )
+            }
+            val chatRef = db.collection("chats").document(chatId)
+            batch.update(
+                chatRef,
+                mapOf(
+                    "mode" to "HUMAN",
+                    "status" to "WAITING",
+                    "assignedStaffId" to null,
+                    "assignedStaffName" to null,
+                    "isStaffTyping" to false,
+                    "updatedAt" to now
+                )
+            )
+            val sysMsgRef = chatRef.collection("messages").document()
+            val sysMsg = Message(
+                messageId = sysMsgRef.id,
+                senderId = "SYSTEM",
+                senderType = "SYSTEM",
+                messageType = "SYSTEM",
+                content = "Nhân viên $staffName đã bàn giao yêu cầu hỗ trợ về hàng chờ để chuyên viên khác tiếp tục phục vụ bạn.",
+                sendStatus = "COMPLETED",
+                createdAt = now
+            )
+            batch.set(sysMsgRef, sysMsg)
+            batch.commit().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     private fun formatVnd(amount: Double): String {

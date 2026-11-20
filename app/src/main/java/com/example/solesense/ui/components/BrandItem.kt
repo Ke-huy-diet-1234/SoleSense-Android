@@ -48,18 +48,27 @@ fun BrandItem(
                 .background(Color(0xFFF5F5F5)),
             contentAlignment = Alignment.Center
         ) {
-            if (!brand.logoUrl.isNullOrEmpty()) {
-                // Tải URL tĩnh hoặc SVG từ Firebase
+            val resolvedLogoModel = when (brand.brandId.lowercase()) {
+                "nike" -> "file:///android_asset/brands/Logo_NIKE.svg"
+                "adidas" -> "file:///android_asset/brands/Adidas_Logo.svg"
+                "asics" -> "file:///android_asset/brands/Asics_Logo.svg"
+                "newbalance", "new_balance" -> "file:///android_asset/brands/New_Balance_Logo.svg"
+                "converse" -> "file:///android_asset/brands/Converse_Logo.svg"
+                "puma" -> "file:///android_asset/brands/Puma_Logo.svg"
+                "reebok" -> "file:///android_asset/brands/Reebok_Logo.svg"
+                else -> brand.logoUrl
+            }
+
+            if (!resolvedLogoModel.isNullOrEmpty()) {
                 AsyncImage(
-                    model = brand.logoUrl,
+                    model = resolvedLogoModel,
                     contentDescription = brand.name,
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(12.dp), // Padding để logo không chạm viền hình tròn
+                        .padding(14.dp),
                     contentScale = ContentScale.Fit
                 )
             } else {
-                // Icon dự phòng khi logoUrl bị null/rỗng (hoặc nút More)
                 Icon(
                     painter = painterResource(android.R.drawable.ic_menu_more),
                     contentDescription = brand.name,

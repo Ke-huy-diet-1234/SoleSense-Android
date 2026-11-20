@@ -26,6 +26,7 @@ import com.example.solesense.ui.home.components.HomeHeader
 fun SearchBar(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onFilterClick: () -> Unit = onClick,
     placeholder: String = "Tìm kiếm sản phẩm..."
 ) {
     Box(
@@ -43,7 +44,10 @@ fun SearchBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
                 Icon(
                     imageVector = Icons.Outlined.Search,
                     contentDescription = "Search Icon",
@@ -54,16 +58,24 @@ fun SearchBar(
                 Text(
                     text = placeholder,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.LightGray,
+                    color = Color.Gray,
                     fontSize = 14.sp
                 )
             }
-            Icon(
-                painter = painterResource(id = R.drawable.ic_filter_list),
-                contentDescription = "Filter Icon",
-                tint = Color.Black,
-                modifier = Modifier.size(20.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { onFilterClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_filter_list),
+                    contentDescription = "Filter Icon",
+                    tint = Color.Black,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }

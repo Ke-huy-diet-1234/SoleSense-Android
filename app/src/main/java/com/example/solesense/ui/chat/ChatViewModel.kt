@@ -131,12 +131,11 @@ class ChatViewModel(
                     val prevCount = lastKnownMessageCount
                     lastKnownMessageCount = msgList.size
 
-                    // Nếu nhân viên vừa bấm kết thúc hỗ trợ (tin nhắn mới nhất có eventCode == RESOLVED),
-                    // hiện hộp thoại mời đánh giá chất lượng hỗ trợ cho vui
+                    // Chỉ hiện hộp thoại đánh giá popup khi NHÂN VIÊN HỖ TRỢ tự tay ấn kết thúc cuộc trò chuyện (RESOLVED).
+                    // Nếu kết thúc với AI thì chỉ hiển thị thẻ đánh giá trực tiếp trên màn hình chat.
                     val newestMsg = msgList.lastOrNull()
-                    val shouldPromptRating = prevCount in 1 until msgList.size &&
-                        newestMsg?.senderType == "SYSTEM" &&
-                        newestMsg.eventCode == "RESOLVED"
+                    val shouldPromptRating = prevCount in 1..msgList.size &&
+                        (newestMsg?.senderType == "SYSTEM" && newestMsg.eventCode == "RESOLVED")
 
                     _uiState.update {
                         it.copy(

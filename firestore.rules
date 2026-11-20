@@ -1,0 +1,150 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && getUserData().role == "ADMIN";
+    }
+
+    function isSupportOrAdmin() {
+      return isSignedIn() && (getUserData().role == "SUPPORT" || getUserData().role == "ADMIN");
+    }
+
+    function isNotBlocked() {
+      return isSignedIn() && getUserData().status != "BLOCKED";
+    }
+
+    // 1. Users & Subcollections (Addresses, VoucherUsages)
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isSupportOrAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId
+                    && (!("role" in request.resource.data) || request.resource.data.role == "CUSTOMER");
+      // Khách hàng không được tự nâng quyền (role) hoặc tự mở khóa tài khoản (status)
+      allow update: if isAdmin() || (
+        isSignedIn() && request.auth.uid == userId &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(["role", "status"]))
+      );
+
+      match /addresses/{addressId} {
+        allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      }
+
+      match /voucherUsages/{usageId} {
+        allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+        allow create: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      }
+    }
+
+    // 2. Catalog (Products, Variants, Brands, Categories) - Công khai cho Guest đọc, Admin quản trị
+    match /products/{productId} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      // Cho phép Admin cập nhật toàn bộ hoặc Transaction đặt hàng cập nhật tồn kho & điểm đánh giá
+      allow update: if isAdmin() || isNotBlocked();
+
+      match /variants/{variantId} {
+        allow read: if true;
+        allow create, delete: if isAdmin();
+        allow update: if isAdmin() || isNotBlocked();
+      }
+    }
+
+    match /brands/{brandId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 3. Carts & Favorites (Cá nhân hóa theo UID)
+    match /carts/{userId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      match /items/{itemId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+
+    match /favorites/{userId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      match /items/{productId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+
+    // 4. Orders, Payments & Inventory Logs
+    match /orders/{orderId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isSupportOrAdmin());
+      allow create: if isNotBlocked() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin() || (isNotBlocked() && resource.data.userId == request.auth.uid);
+
+      match /items/{itemId} {
+        allow read: if isSignedIn();
+        allow create: if isNotBlocked();
+      }
+    }
+
+    match /payments/{paymentId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isSupportOrAdmin());
+      allow create: if isNotBlocked();
+      allow update: if isAdmin() || (isNotBlocked() && resource.data.userId == request.auth.uid);
+    }
+
+    match /inventory_logs/{logId} {
+      allow read: if isSupportOrAdmin();
+      allow create: if isSignedIn();
+    }
+
+    // 5. Vouchers
+    match /vouchers/{voucherId} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || isNotBlocked();
+    }
+
+    // 6. Reviews & Return Requests
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isNotBlocked() && request.resource.data.userId == request.auth.uid;
+      allow update: if isSupportOrAdmin() || (isNotBlocked() && resource.data.userId == request.auth.uid);
+    }
+
+    match /returnRequests/{returnId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isSupportOrAdmin());
+      allow create: if isNotBlocked() && request.resource.data.userId == request.auth.uid;
+      allow update: if isSupportOrAdmin();
+    }
+
+    // 7. Notifications & Campaigns
+    match /notifications/{notificationId} {
+      allow read, update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+    }
+
+    match /notification_campaigns/{campaignId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 8. Chats & Support Requests
+    match /chats/{chatId} {
+      allow read, write: if isSignedIn();
+      match /messages/{messageId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    match /supportRequests/{requestId} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}

@@ -11,22 +11,39 @@ class AddressRepository {
     private val auth = FirebaseAuth.getInstance()
 
     fun getCurrentUserId(): String {
-        return auth.currentUser?.uid ?: "mmZhfijntCf7BW2U0pf9VQbm4Xi1"
+        return auth.currentUser?.uid
+            ?: com.example.solesense.utils.UserSessionManager.getActiveUserId()
+            ?: ""
     }
 
     suspend fun getAddresses(userId: String = getCurrentUserId()): Result<List<Address>> {
+        if (userId.isBlank()) return Result.success(emptyList())
         return try {
             val snapshot = db.collection("users")
                 .document(userId)
                 .collection("addresses")
                 .get()
                 .await()
-            val addresses = snapshot.toObjects(Address::class.java)
-                .sortedWith(
-                    compareByDescending<Address> { it.isDefault }
-                        .thenByDescending { it.updatedAt.seconds }
-                )
-            Result.success(addresses)
+
+            val validAddresses = mutableListOf<Address>()
+            for (doc in snapshot.documents) {
+                val addr = doc.toObject(Address::class.java)?.copy(addressId = doc.id) ?: continue
+                // Loại bỏ và dọn dẹp địa chỉ mẫu hardcode cũ ("addr_default" - "Số nhà 83, Thôn Lại Đà") nếu bị nạp tự động trước đây
+                if (addr.addressId == "addr_default" && addr.detail.contains("Thôn Lại Đà", ignoreCase = true)) {
+                    try {
+                        doc.reference.delete()
+                    } catch (_: Exception) {}
+                    continue
+                }
+                val explicitDefault = doc.getBoolean("isDefault") ?: doc.getBoolean("default") ?: addr.isDefault
+                validAddresses.add(addr.copy(isDefault = explicitDefault))
+            }
+
+            val sorted = validAddresses.sortedWith(
+                compareByDescending<Address> { it.isDefault }
+                    .thenByDescending { it.updatedAt.seconds }
+            )
+            Result.success(sorted)
         } catch (e: Exception) {
             Result.failure(e)
         }

@@ -2,6 +2,7 @@ package com.example.solesense.model.user
 
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
+import com.google.firebase.firestore.PropertyName
 
 data class Address(
     @DocumentId val addressId: String = "",
@@ -11,7 +12,9 @@ data class Address(
     val district: String = "",
     val ward: String = "",
     val detail: String = "",
-    val isDefault: Boolean = false,
+    @get:PropertyName("isDefault")
+    @set:PropertyName("isDefault")
+    var isDefault: Boolean = false,
     val createdAt: Timestamp = Timestamp.now(),
     val updatedAt: Timestamp = Timestamp.now()
 ) {

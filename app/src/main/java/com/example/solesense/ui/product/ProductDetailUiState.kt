@@ -2,6 +2,7 @@ package com.example.solesense.ui.product
 
 import com.example.solesense.model.catalog.Product
 import com.example.solesense.model.catalog.Variant
+import com.example.solesense.ui.product.components.ReviewUiModel
 
 sealed interface PendingProductAuthAction {
     data class AddToCart(val variantId: String, val quantity: Int) : PendingProductAuthAction
@@ -49,7 +50,9 @@ data class ProductDetailUiState(
 
     // Các trạng thái khác
     val isFavorite: Boolean = false,
-    val cartItemCount: Int = 0
+    val cartItemCount: Int = 0,
+    val reviews: List<ReviewUiModel> = emptyList(),
+    val relatedProducts: List<Product> = emptyList()
 )
 
 enum class BottomSheetActionType {

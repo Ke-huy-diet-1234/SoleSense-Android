@@ -59,6 +59,8 @@ fun CartScreen(
     var cartItems by remember { mutableStateOf<List<CartItem>>(emptyList()) }
     var selectedItemIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var isEditMode by remember { mutableStateOf(false) }
+    var isSearchVisible by remember { mutableStateOf(false) }
+    var cartSearchQuery by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var showLoginRequiredDialog by remember { mutableStateOf(!isLoggedIn) }
 
@@ -73,8 +75,8 @@ fun CartScreen(
             val result = cartRepository.getCartItems(currentUser?.userId)
             val loaded = result.getOrDefault(emptyList())
             cartItems = loaded
-            // Mặc định tích chọn tất cả các sản phẩm khi mở giỏ hàng
-            selectedItemIds = loaded.map { it.itemId }.toSet()
+            // Mặc định tích chọn tất cả các sản phẩm còn tồn kho khi mở giỏ hàng
+            selectedItemIds = loaded.filter { it.maxStock > 0 }.map { it.itemId }.toSet()
             isLoading = false
         } else {
             cartItems = emptyList()
@@ -196,18 +198,32 @@ fun CartScreen(
 
                             IconButton(
                                 onClick = {
-                                    Toast.makeText(context, "Tìm kiếm trong giỏ hàng", Toast.LENGTH_SHORT).show()
+                                    isSearchVisible = !isSearchVisible
+                                    if (!isSearchVisible) cartSearchQuery = ""
                                 },
                                 modifier = Modifier.size(36.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Search,
                                     contentDescription = "Tìm kiếm",
-                                    tint = Color(0xFF111111),
+                                    tint = if (isSearchVisible) Color(0xFFE53935) else Color(0xFF111111),
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
                         }
+                    }
+
+                    if (isSearchVisible && cartItems.isNotEmpty()) {
+                        OutlinedTextField(
+                            value = cartSearchQuery,
+                            onValueChange = { cartSearchQuery = it },
+                            placeholder = { Text("Tìm sản phẩm, màu sắc hoặc size trong giỏ...", fontSize = 13.sp) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                        )
                     }
 
                     // Thanh "Chọn tất cả" gọn nhẹ ngay dưới Header
@@ -455,6 +471,15 @@ fun CartScreen(
                 }
             }
         } else {
+            val filteredCartItems = remember(cartItems, cartSearchQuery) {
+                val q = cartSearchQuery.trim().lowercase()
+                if (q.isEmpty()) cartItems
+                else cartItems.filter {
+                    it.productName.lowercase().contains(q) ||
+                            it.color.lowercase().contains(q) ||
+                            it.size.lowercase().contains(q)
+                }
+            }
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -463,12 +488,16 @@ fun CartScreen(
                 contentPadding = PaddingValues(vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(cartItems, key = { it.itemId }) { item ->
+                items(filteredCartItems, key = { it.itemId }) { item ->
                     val isChecked = selectedItemIds.contains(item.itemId)
                     CartItemRowCard(
                         item = item,
                         isChecked = isChecked,
                         onCheckedChange = {
+                            if (!isEditMode && !isChecked && item.maxStock <= 0) {
+                                Toast.makeText(context, "Sản phẩm này hiện đã tạm hết hàng!", Toast.LENGTH_SHORT).show()
+                                return@CartItemRowCard
+                            }
                             selectedItemIds = if (isChecked) {
                                 selectedItemIds - item.itemId
                             } else {

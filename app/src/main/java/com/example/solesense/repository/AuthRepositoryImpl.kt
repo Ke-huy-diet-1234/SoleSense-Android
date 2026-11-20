@@ -3,6 +3,7 @@ package com.example.solesense.repository
 import androidx.credentials.Credential
 import androidx.credentials.CustomCredential
 import com.example.solesense.model.user.User
+import com.example.solesense.model.user.toSafeUser
 import com.facebook.AccessToken
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.Timestamp
@@ -17,7 +18,7 @@ class AuthRepositoryImpl(
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
 ) {
     /**
-     * Kiểm tra phiên đăng nhập hiện tại và lấy thông tin User + Role từ Firestore
+     * Kiểm tra phiên đăng nhập hiện tại và lấy thông tin User + Role + avatarUrl từ Firestore
      */
     suspend fun getCurrentSessionUser(): User? {
         val firebaseUser = auth.currentUser ?: return null
@@ -25,31 +26,57 @@ class AuthRepositoryImpl(
             val userDocRef = firestore.collection("users").document(firebaseUser.uid)
             val snapshot = userDocRef.get().await()
             if (snapshot.exists()) {
-                val user = snapshot.toObject(User::class.java)
-                user?.copy(userId = firebaseUser.uid)
-            } else {
-                val fallbackRole = when {
-                    firebaseUser.email?.contains("admin", ignoreCase = true) == true -> "ADMIN"
-                    firebaseUser.email?.contains("support", ignoreCase = true) == true -> "SUPPORT"
-                    else -> "CUSTOMER"
-                }
-                val newUser = User(
+                val parsed = snapshot.toSafeUser(firebaseUser.uid)
+                parsed.copy(
                     userId = firebaseUser.uid,
-                    fullName = firebaseUser.displayName ?: "Khách hàng",
-                    email = firebaseUser.email ?: "",
-                    avatarUrl = firebaseUser.photoUrl?.toString() ?: "",
-                    role = fallbackRole,
-                    status = "ACTIVE",
-                    isVerified = true
+                    fullName = parsed.fullName.ifBlank { firebaseUser.displayName ?: "Khách hàng" },
+                    email = parsed.email.ifBlank { firebaseUser.email ?: "" },
+                    avatarUrl = parsed.avatarUrl?.takeIf { it.isNotBlank() } ?: firebaseUser.photoUrl?.toString().orEmpty()
                 )
-                userDocRef.set(newUser).await()
-                newUser
+            } else {
+                val emailQuery = if (!firebaseUser.email.isNullOrBlank()) {
+                    firestore.collection("users")
+                        .whereEqualTo("email", firebaseUser.email)
+                        .get()
+                        .await()
+                } else null
+                val matchedDoc = emailQuery?.documents?.firstOrNull()
+
+                if (matchedDoc != null) {
+                    val parsed = matchedDoc.toSafeUser(firebaseUser.uid)
+                    val merged = parsed.copy(
+                        userId = firebaseUser.uid,
+                        fullName = parsed.fullName.ifBlank { firebaseUser.displayName ?: "Khách hàng" },
+                        email = parsed.email.ifBlank { firebaseUser.email ?: "" },
+                        avatarUrl = parsed.avatarUrl?.takeIf { it.isNotBlank() } ?: firebaseUser.photoUrl?.toString().orEmpty()
+                    )
+                    userDocRef.set(merged, com.google.firebase.firestore.SetOptions.merge()).await()
+                    merged
+                } else {
+                    val fallbackRole = when {
+                        firebaseUser.email?.contains("admin", ignoreCase = true) == true -> "ADMIN"
+                        firebaseUser.email?.contains("support", ignoreCase = true) == true -> "SUPPORT"
+                        else -> "CUSTOMER"
+                    }
+                    val newUser = User(
+                        userId = firebaseUser.uid,
+                        fullName = firebaseUser.displayName ?: "Khách hàng",
+                        email = firebaseUser.email ?: "",
+                        avatarUrl = firebaseUser.photoUrl?.toString() ?: "",
+                        role = fallbackRole,
+                        status = "ACTIVE",
+                        isVerified = true
+                    )
+                    userDocRef.set(newUser).await()
+                    newUser
+                }
             }
         } catch (e: Exception) {
             User(
                 userId = firebaseUser.uid,
                 fullName = firebaseUser.displayName ?: "Người dùng SoleSense",
                 email = firebaseUser.email ?: "",
+                avatarUrl = firebaseUser.photoUrl?.toString().orEmpty(),
                 role = "CUSTOMER"
             )
         }
@@ -78,25 +105,55 @@ class AuthRepositoryImpl(
             val authResult = auth.signInWithCredential(firebaseAuthCredential).await()
             val firebaseUser = authResult.user ?: throw Exception("Lỗi lấy thông tin User")
 
-            // 3. Đồng bộ vào Firestore (Luồng Check-then-Write)
+            // 3. Đồng bộ vào Firestore (Giữ nguyên avatarUrl đã chọn trên Firestore nếu tài khoản đã tồn tại)
             val userDocRef = firestore.collection("users").document(firebaseUser.uid)
             val snapshot = userDocRef.get().await()
 
             val finalUser = if (snapshot.exists()) {
-                snapshot.toObject(User::class.java)!!.copy(userId = firebaseUser.uid)
-            } else {
-                val newUser = User(
+                val existing = snapshot.toSafeUser(firebaseUser.uid)
+                existing.copy(
                     userId = firebaseUser.uid,
-                    fullName = firebaseUser.displayName ?: "Khách hàng",
-                    email = firebaseUser.email ?: "",
-                    avatarUrl = firebaseUser.photoUrl?.toString() ?: "",
-                    role = "CUSTOMER",
-                    status = "ACTIVE",
-                    isVerified = true,
-                    provider = "google"
+                    fullName = existing.fullName.ifBlank { firebaseUser.displayName ?: "Khách hàng" },
+                    email = existing.email.ifBlank { firebaseUser.email ?: "" },
+                    avatarUrl = existing.avatarUrl?.takeIf { it.isNotBlank() } ?: firebaseUser.photoUrl?.toString().orEmpty()
                 )
-                userDocRef.set(newUser).await()
-                newUser
+            } else {
+                val emailQuery = if (!firebaseUser.email.isNullOrBlank()) {
+                    firestore.collection("users")
+                        .whereEqualTo("email", firebaseUser.email)
+                        .get()
+                        .await()
+                } else null
+                val matchedDoc = emailQuery?.documents?.firstOrNull()
+
+                if (matchedDoc != null) {
+                    val existing = matchedDoc.toSafeUser(firebaseUser.uid)
+                    val merged = existing.copy(
+                        userId = firebaseUser.uid,
+                        fullName = existing.fullName.ifBlank { firebaseUser.displayName ?: "Khách hàng" },
+                        email = existing.email.ifBlank { firebaseUser.email ?: "" },
+                        avatarUrl = existing.avatarUrl?.takeIf { it.isNotBlank() } ?: firebaseUser.photoUrl?.toString().orEmpty()
+                    )
+                    userDocRef.set(merged, com.google.firebase.firestore.SetOptions.merge()).await()
+                    merged
+                } else {
+                    val newUser = User(
+                        userId = firebaseUser.uid,
+                        fullName = firebaseUser.displayName ?: "Khách hàng",
+                        email = firebaseUser.email ?: "",
+                        avatarUrl = firebaseUser.photoUrl?.toString() ?: "",
+                        role = "CUSTOMER",
+                        status = "ACTIVE",
+                        isVerified = true,
+                        provider = "google"
+                    )
+                    userDocRef.set(newUser).await()
+                    newUser
+                }
+            }
+            if (finalUser.status.uppercase() == "BLOCKED") {
+                auth.signOut()
+                return Result.failure(Exception("Tài khoản của bạn đã bị khóa bởi Quản trị viên!"))
             }
             Result.success(finalUser)
         } catch (e: Exception) {
@@ -113,12 +170,12 @@ class AuthRepositoryImpl(
             val authResult = auth.signInWithCredential(credential).await()
             val firebaseUser = authResult.user ?: throw Exception("Lỗi lấy thông tin User từ Firebase")
 
-            // 3. Đồng bộ vào Firestore (Luồng Check-then-Write)
+            // 3. Đồng bộ vào Firestore
             val userDocRef = firestore.collection("users").document(firebaseUser.uid)
             val snapshot = userDocRef.get().await()
 
             val finalUser = if (snapshot.exists()) {
-                snapshot.toObject(User::class.java)!!.copy(userId = firebaseUser.uid)
+                snapshot.toSafeUser(firebaseUser.uid)
             } else {
                 val newUser = User(
                     userId = firebaseUser.uid,
@@ -132,6 +189,10 @@ class AuthRepositoryImpl(
                 )
                 userDocRef.set(newUser).await()
                 newUser
+            }
+            if (finalUser.status.uppercase() == "BLOCKED") {
+                auth.signOut()
+                return Result.failure(Exception("Tài khoản của bạn đã bị khóa bởi Quản trị viên!"))
             }
             Result.success(finalUser)
         } catch (e: Exception) {
@@ -148,16 +209,15 @@ class AuthRepositoryImpl(
             val snapshot = userDocRef.get().await()
 
             val finalUser = if (snapshot.exists()) {
-                snapshot.toObject(User::class.java)!!.copy(userId = firebaseUser.uid)
+                snapshot.toSafeUser(firebaseUser.uid)
             } else {
-                // Kiểm tra theo email trên Firestore nếu uid khác hoặc tự xác định role
                 val emailQuery = firestore.collection("users")
                     .whereEqualTo("email", email.trim())
                     .get()
                     .await()
                 val matchedDoc = emailQuery.documents.firstOrNull()
                 if (matchedDoc != null) {
-                    matchedDoc.toObject(User::class.java)!!.copy(userId = firebaseUser.uid)
+                    matchedDoc.toSafeUser(firebaseUser.uid)
                 } else {
                     val inferredRole = when {
                         email.contains("admin", ignoreCase = true) -> "ADMIN"
@@ -176,6 +236,10 @@ class AuthRepositoryImpl(
                     userDocRef.set(newUser).await()
                     newUser
                 }
+            }
+            if (finalUser.status.uppercase() == "BLOCKED") {
+                auth.signOut()
+                return Result.failure(Exception("Tài khoản của bạn đã bị khóa bởi Quản trị viên!"))
             }
             Result.success(finalUser)
         } catch (e: Exception) {

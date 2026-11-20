@@ -4,14 +4,20 @@ import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,12 +35,18 @@ import coil.compose.AsyncImage
 import com.example.solesense.R
 import com.example.solesense.repository.FavoriteRepository
 import com.example.solesense.ui.components.LoginRequiredDialog
+import com.example.solesense.utils.AssetConfig
 import com.example.solesense.utils.UserSessionManager
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     onNavigateToAuth: () -> Unit = {},
+    onNavigateToSetupProfile: () -> Unit = {},
     onNavigateToAddresses: () -> Unit = {},
+    onNavigateToOrders: () -> Unit = {},
+    onNavigateToNotifications: () -> Unit = {},
     onNavigateToFavorites: () -> Unit = {},
     onSwitchToRoleDashboard: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -43,8 +55,10 @@ fun ProfileScreen(
     val favoriteIds by FavoriteRepository.favoriteProductIds.collectAsState()
     val isLoggedIn = currentUser != null
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     var showLoginRequiredDialog by remember { mutableStateOf(false) }
+    var isAvatarPickerOpen by remember { mutableStateOf(false) }
 
     fun requireAuthOrExecute(action: () -> Unit) {
         if (!isLoggedIn) {
@@ -87,37 +101,68 @@ fun ProfileScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(60.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFF2F2F2)),
+                        .size(64.dp)
+                        .clickable {
+                            if (isLoggedIn) isAvatarPickerOpen = true else onNavigateToAuth()
+                        },
                     contentAlignment = Alignment.Center
                 ) {
-                    if (isLoggedIn) {
-                        val avatarUrl = currentUser?.avatarUrl
-                        if (!avatarUrl.isNullOrBlank()) {
-                            AsyncImage(
-                                model = avatarUrl,
-                                contentDescription = "Avatar",
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(CircleShape),
-                                contentScale = ContentScale.Crop
-                            )
+                    Box(
+                        modifier = Modifier
+                            .size(60.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFF2F2F2)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isLoggedIn) {
+                            val avatarUrl = currentUser?.avatarUrl
+                            if (!avatarUrl.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = avatarUrl,
+                                    contentDescription = "Avatar",
+                                    placeholder = painterResource(id = R.drawable.ic_solesense_logo),
+                                    error = painterResource(id = R.drawable.ic_solesense_logo),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_solesense_logo),
+                                    contentDescription = "Avatar",
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
                         } else {
-                            Image(
-                                painter = painterResource(id = R.drawable.ic_solesense_logo),
-                                contentDescription = "Avatar",
-                                modifier = Modifier.size(42.dp),
-                                contentScale = ContentScale.Fit
+                            Icon(
+                                imageVector = Icons.Outlined.Person,
+                                contentDescription = "Khách",
+                                tint = Color(0xFF757575),
+                                modifier = Modifier.size(32.dp)
                             )
                         }
-                    } else {
-                        Icon(
-                            imageVector = Icons.Outlined.Person,
-                            contentDescription = "Khách",
-                            tint = Color(0xFF757575),
-                            modifier = Modifier.size(32.dp)
-                        )
+                    }
+
+                    if (isLoggedIn) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .size(22.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF111111)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Edit,
+                                contentDescription = "Sửa hồ sơ",
+                                tint = Color.White,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
                     }
                 }
 
@@ -134,6 +179,11 @@ fun ProfileScreen(
                                 )
                             )
                             Spacer(modifier = Modifier.width(8.dp))
+                            val roleLabelVi = when (currentUser!!.role.uppercase()) {
+                                "ADMIN" -> "Quản trị viên"
+                                "SUPPORT" -> "Hỗ trợ viên"
+                                else -> "Khách hàng"
+                            }
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
@@ -141,7 +191,7 @@ fun ProfileScreen(
                                     .padding(horizontal = 7.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = currentUser!!.role,
+                                    text = roleLabelVi,
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         color = Color(0xFFE53935),
                                         fontWeight = FontWeight.Bold
@@ -156,7 +206,7 @@ fun ProfileScreen(
                         )
                     } else {
                         Text(
-                            text = "Khách chưa đăng nhập (Guest)",
+                            text = "Khách chưa đăng nhập",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF111111)
@@ -264,6 +314,30 @@ fun ProfileScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             ProfileActionItem(
+                title = "Cập nhật thông tin cá nhân",
+                subtitle = "Chỉnh sửa ảnh đại diện, họ tên, biệt danh, SĐT và địa chỉ mặc định",
+                onClick = {
+                    requireAuthOrExecute {
+                        onNavigateToSetupProfile()
+                    }
+                }
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            ProfileActionItem(
+                title = "Đơn hàng của tôi",
+                subtitle = "Theo dõi đơn đang giao, đánh giá sản phẩm và mua lại",
+                onClick = {
+                    requireAuthOrExecute {
+                        onNavigateToOrders()
+                    }
+                }
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            ProfileActionItem(
                 title = "Địa chỉ giao hàng",
                 subtitle = "Thêm, sửa, xóa và đặt địa chỉ nhận hàng mặc định",
                 onClick = {
@@ -276,12 +350,10 @@ fun ProfileScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             ProfileActionItem(
-                title = "Lịch sử đơn hàng",
-                subtitle = "Theo dõi trạng thái chờ xác nhận, đang giao và đã giao",
+                title = "Thông báo của tôi",
+                subtitle = "Xem thông báo đơn hàng, thanh toán, khuyến mãi và hệ thống",
                 onClick = {
-                    requireAuthOrExecute {
-                        Toast.makeText(context, "Đang tải lịch sử đơn hàng của bạn", Toast.LENGTH_SHORT).show()
-                    }
+                    onNavigateToNotifications()
                 }
             )
 
@@ -337,6 +409,97 @@ fun ProfileScreen(
             showLoginRequiredDialog = false
         }
     )
+
+    if (isAvatarPickerOpen) {
+        ModalBottomSheet(
+            onDismissRequest = { isAvatarPickerOpen = false },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 28.dp)
+            ) {
+                Text(
+                    text = "Chọn ảnh đại diện có sẵn",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp,
+                        color = Color(0xFF111827)
+                    )
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Chọn 1 trong ${AssetConfig.PRESET_AVATARS.size} mẫu ảnh đại diện SoleSense",
+                    style = MaterialTheme.typography.bodySmall.copy(color = Color.Gray)
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(4),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 260.dp)
+                ) {
+                    itemsIndexed(AssetConfig.PRESET_AVATARS) { index, url ->
+                        val isChosen = currentUser?.avatarUrl == url
+                        Box(
+                            modifier = Modifier
+                                .aspectRatio(1f)
+                                .clip(CircleShape)
+                                .border(
+                                    width = if (isChosen) 3.dp else 1.dp,
+                                    color = if (isChosen) Color(0xFF16A34A) else Color(0xFFE5E7EB),
+                                    shape = CircleShape
+                                )
+                                .clickable {
+                                    isAvatarPickerOpen = false
+                                    scope.launch {
+                                        UserSessionManager.updateAvatar(url).onSuccess {
+                                            Toast.makeText(context, "Đã cập nhật ảnh đại diện!", Toast.LENGTH_SHORT).show()
+                                        }.onFailure { e ->
+                                            Toast.makeText(context, "Lỗi cập nhật ảnh đại diện: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                        ) {
+                            AsyncImage(
+                                model = url,
+                                contentDescription = "Avatar ${index + 1}",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+
+                            if (isChosen) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .size(22.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF16A34A)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

@@ -1,54 +1,96 @@
 package com.example.solesense.utils
 
-
-
 import com.example.solesense.model.catalog.Product
 import com.example.solesense.model.catalog.ProductBadge
 import com.example.solesense.model.catalog.ProductModel
-import com.google.firebase.Timestamp
-import java.util.concurrent.TimeUnit
+import java.text.Normalizer
+import java.util.Locale
 
-// Hàm mở rộng giúp chuyển đổi 1 đối tượng Product (DB) thành ProductModel (UI)
+/**
+ * Chuyển đổi đối tượng Product (Firestore) sang ProductModel (UI)
+ * với cấu hình nhãn dán (Badge) phân bổ đa dạng, hài hòa theo đặc trưng từng sản phẩm
+ * và tích hợp từ khóa tìm kiếm tiếng Việt (có dấu & không dấu).
+ */
 fun Product.toProductModel(): ProductModel {
-    // 1. Tính toán Nhãn (Badge) bằng Logic nghiệp vụ
+    val currentPrice = this.salePrice ?: this.basePrice
+    val originalPrice = if (this.salePrice != null && this.salePrice < this.basePrice) this.basePrice else null
+    val discountPct = if (originalPrice != null && originalPrice > 0) {
+        (((originalPrice - currentPrice) / originalPrice) * 100.0).toInt().coerceAtLeast(1)
+    } else 0
+
     val badge = when {
-        this.salePrice != null && this.salePrice < this.basePrice -> ProductBadge.SALE
-        this.totalSoldCount > 1000 -> ProductBadge.BESTSELLER
-        isNewProduct(this.createdAt) -> ProductBadge.NEW
+        this.totalStockQuantity in 1..18 -> ProductBadge.LOW_STOCK
+        this.totalSoldCount >= 600 -> ProductBadge.BESTSELLER
+        this.totalSoldCount in 1..220 -> ProductBadge.NEW
+        discountPct >= 15 -> ProductBadge.SALE
         else -> ProductBadge.NONE
     }
 
-    // 2. Tính toán Giá trị hiển thị
-    val currentPrice = this.salePrice ?: this.basePrice
-    val originalPrice = if (this.salePrice != null) this.basePrice else null
+    val categoryViKeywords = when (this.categoryId.lowercase()) {
+        "running" -> "giày chạy bộ marathon đi bộ đường dài thể thao"
+        "lifestyle" -> "giày thời trang đi chơi đi học dạo phố sneaker cổ điển"
+        "basketball" -> "giày bóng rổ sân bóng rổ bật nhảy"
+        "training" -> "giày tập luyện tập gym thể hình"
+        else -> this.categoryId
+    }
 
-    // 3. Trả về Model đã được "làm sạch" cho Compose vẽ
+    val brandDisplayKeywords = when (this.brandId.lowercase()) {
+        "newbalance", "new_balance" -> "new balance nb"
+        "nike" -> "nike air jordan pegasus"
+        "adidas" -> "adidas ultraboost samba supernova"
+        "asics" -> "asics gel nimbus kayano"
+        "converse" -> "converse chuck taylor 70"
+        "puma" -> "puma rs-x deviate nitro"
+        "reebok" -> "reebok"
+        else -> this.brandId
+    }
+
+    val rawSearchBlob = listOfNotNull(
+        this.name,
+        this.brandId,
+        brandDisplayKeywords,
+        this.categoryId,
+        categoryViKeywords,
+        this.description,
+        this.purpose,
+        this.material,
+        this.cushioning,
+        this.terrain
+    ).joinToString(" ").lowercase(Locale.getDefault())
+
+    val fullSearchKeywords = "$rawSearchBlob ${rawSearchBlob.removeVietnameseAccents()}"
+
     return ProductModel(
         id = this.productId,
         name = this.name,
-        // UI chỉ cần 1 ảnh đại diện (phần tử đầu tiên), nếu mảng rỗng thì trả về chuỗi rỗng
         imageUrl = this.imageUrls.firstOrNull() ?: "",
         rating = this.rating,
-        soldCount = formatSoldCount(this.totalSoldCount), // Chuyển "1200" thành "1.2k"
+        soldCount = formatSoldCount(this.totalSoldCount),
         originalPrice = originalPrice?.toLong(),
         currentPrice = currentPrice.toLong(),
         badge = badge,
-        isOutOfStock = this.status == "OUT_OF_STOCK" || this.totalStockQuantity <= 0
+        isOutOfStock = this.status == "OUT_OF_STOCK" || this.totalStockQuantity <= 0,
+        rawSoldCount = this.totalSoldCount,
+        stockQuantity = this.totalStockQuantity,
+        brandId = if (this.brandId.equals("new_balance", ignoreCase = true)) "newbalance" else this.brandId,
+        categoryId = this.categoryId,
+        discountPercent = discountPct,
+        createdAtSeconds = this.createdAt.seconds,
+        searchKeywords = fullSearchKeywords
     )
 }
 
-// Logic phụ trợ: Định nghĩa thế nào là "Hàng mới" (Ví dụ: tạo trong vòng 14 ngày qua)
-private fun isNewProduct(createdAt: Timestamp): Boolean {
-    val now = Timestamp.now().seconds
-    val created = createdAt.seconds
-    val diffInDays = TimeUnit.SECONDS.toDays(now - created)
-    return diffInDays <= 14
+fun String.removeVietnameseAccents(): String {
+    val normalized = Normalizer.normalize(this, Normalizer.Form.NFD)
+    return normalized
+        .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+        .replace('đ', 'd')
+        .replace('Đ', 'D')
 }
 
-// Logic phụ trợ: Rút gọn số lượng bán
 private fun formatSoldCount(count: Int): String {
     return when {
-        count >= 1000 -> String.format("%.1fk", count / 1000.0)
+        count >= 1000 -> String.format(Locale.US, "%.1fk", count / 1000.0).replace('.', ',')
         else -> count.toString()
     }
 }

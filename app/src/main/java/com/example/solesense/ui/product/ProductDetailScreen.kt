@@ -30,6 +30,7 @@ fun ProductDetailScreen(
     onNavigateToCheckout: (variantId: String) -> Unit,
     onNavigateToAuth: () -> Unit = {},
     onNavigateToChat: ((productId: String, name: String, price: Double, imageUrl: String, color: String, size: String) -> Unit)? = null,
+    onRelatedProductClick: (String) -> Unit = {},
     onReturnToRoleDashboard: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -203,18 +204,30 @@ fun ProductDetailScreen(
                 }
 
                 item {
+                    val avgRating = if (uiState.reviews.isNotEmpty()) {
+                        ((uiState.reviews.map { it.rating }.average() * 10).toInt() / 10.0)
+                    } else if (product.rating > 0) {
+                        product.rating
+                    } else {
+                        4.8
+                    }
+                    val totalRevCount = if (uiState.reviews.isNotEmpty()) {
+                        uiState.reviews.size
+                    } else {
+                        product.reviewCount
+                    }
                     ProductReviewSection(
-                        averageRating = 4.8,
-                        totalReviews = 120,
-                        reviews = emptyList(),
+                        averageRating = avgRating,
+                        totalReviews = totalRevCount,
+                        reviews = uiState.reviews,
                         onSeeAllClick = {}
                     )
                 }
 
                 item {
                     RelatedProductsSection(
-                        products = emptyList(),
-                        onProductClick = {}
+                        products = uiState.relatedProducts,
+                        onProductClick = onRelatedProductClick
                     )
                 }
 

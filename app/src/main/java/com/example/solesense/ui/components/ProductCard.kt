@@ -19,6 +19,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,131 +42,138 @@ fun ProductCard(
     val favoriteIds by FavoriteRepository.favoriteProductIds.collectAsState()
     val isFavorite = favoriteIds.contains(product.id)
 
-    Card(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .clickable { onProductClick() },
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            .clickable { onProductClick() }
+            .padding(bottom = 4.dp)
     ) {
-        Column {
-            // 1. KHU VỰC ẢNH SẢN PHẨM & NHÃN OVERLAY
-            Box(
+        // 1. KHU VỰC ẢNH SẢN PHẨM TRÀN KHUNG SẮC NÉT & NHÃN NHỎ GỌN
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1.06f)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFFF5F5F7))
+        ) {
+            // Ảnh sản phẩm tràn đều khung bo góc, không bị co lọt sâu vào trong
+            AsyncImage(
+                model = product.imageUrl,
+                contentDescription = product.name,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1.1f)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFFF7F7F8))
-            ) {
-                // Ảnh sản phẩm
-                AsyncImage(
-                    model = product.imageUrl,
-                    contentDescription = product.name,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    contentScale = ContentScale.Fit
-                )
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(16.dp)),
+                contentScale = ContentScale.Crop
+            )
 
-                // Nhãn Badge góc trái (BESTSELLER / NEW / SALE)
-                if (product.badge != ProductBadge.NONE && !product.isOutOfStock) {
-                    val (badgeText, badgeColor, icon) = when (product.badge) {
-                        ProductBadge.BESTSELLER -> Triple("BESTSELLER", Color(0xFFFF8A00), R.drawable.ic_crown)
-                        ProductBadge.NEW -> Triple("NEW", Color(0xFF00B14F), null)
-                        ProductBadge.SALE -> Triple("SALE", Color(0xFFE74C3C), null)
-                        ProductBadge.NONE -> Triple("", Color.Transparent, null)
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .padding(top = 8.dp, start = 8.dp)
-                            .background(badgeColor, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 1.dp)
-                    ) {
-                        if (icon != null) {
-                            Icon(
-                                painterResource(icon),
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(10.dp)
-                            )
-                            Spacer(modifier = Modifier.width(2.dp))
-                        }
-                        Text(
-                            text = badgeText,
-                            color = Color.White,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+            // Nhãn Badge góc trên trái: Thiết kế mảnh, nhỏ gọn, tinh tế
+            if (product.badge != ProductBadge.NONE && !product.isOutOfStock) {
+                val (badgeText, badgeColor) = when (product.badge) {
+                    ProductBadge.BESTSELLER -> "Bán chạy" to Color(0xFF111827)
+                    ProductBadge.NEW -> "Mới" to Color(0xFF0284C7)
+                    ProductBadge.SALE -> "Giảm giá" to Color(0xFFE53935)
+                    ProductBadge.LOW_STOCK -> "Sắp hết" to Color(0xFFD97706)
+                    ProductBadge.NONE -> "" to Color.Transparent
                 }
 
-                // Nút Trái tim Yêu thích (Đổi màu đỏ khi đã thích, ấn lại để bỏ yêu thích)
                 Box(
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(if (isFavorite) Color(0xFFFFEBEE) else Color(0xFF1E1E1E))
-                        .clickable { onFavoriteClick() },
+                        .align(Alignment.TopStart)
+                        .padding(top = 8.dp, start = 8.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(badgeColor.copy(alpha = 0.88f))
+                        .padding(horizontal = 6.dp, vertical = 2.5.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = "Favorite",
-                        tint = if (isFavorite) Color(0xFFE53935) else Color.White,
-                        modifier = Modifier.size(15.dp)
-                    )
-                }
-
-                // Lớp phủ TẠM HẾT HÀNG ở chính giữa ảnh
-                if (product.isOutOfStock) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.05f))
-                    )
-                    Row(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .background(Color(0xCC1E1E1E), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_package),
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "TẠM HẾT HÀNG",
+                    Text(
+                        text = badgeText,
+                        style = TextStyle(
                             color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
+                            fontSize = 9.5.sp,
+                            lineHeight = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            platformStyle = PlatformTextStyle(includeFontPadding = false)
                         )
-                    }
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            // Nút Trái tim Yêu thích nhỏ gọn góc trên phải
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (isFavorite) Color(0xFFFFEBEE) else Color.Black.copy(alpha = 0.65f)
+                    )
+                    .clickable { onFavoriteClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                    contentDescription = "Yêu thích",
+                    tint = if (isFavorite) Color(0xFFE53935) else Color.White,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
 
+            // Lớp phủ TẠM HẾT HÀNG ở chính giữa ảnh
+            if (product.isOutOfStock) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.12f))
+                )
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .background(Color(0xD91E1E1E), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_package),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Tạm hết hàng",
+                        style = TextStyle(
+                            color = Color.White,
+                            fontSize = 10.5.sp,
+                            lineHeight = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            platformStyle = PlatformTextStyle(includeFontPadding = false)
+                        )
+                    )
+                }
+            }
+        }
+
+        // Phần nội dung chữ bên dưới tách khỏi khung bo góc & có khoảng đệm an toàn không bao giờ bị cắt chữ
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 6.dp)
+        ) {
             // 2. TÊN SẢN PHẨM
             Text(
                 text = product.name,
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp
                 ),
-                color = if (product.isOutOfStock) Color.Gray else Color.Black,
+                color = if (product.isOutOfStock) Color.Gray else Color(0xFF111827),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             // 3. ĐÁNH GIÁ & SỐ LƯỢNG ĐÃ BÁN
             Row(
@@ -174,67 +183,98 @@ fun ProductCard(
                     imageVector = Icons.Default.Star,
                     contentDescription = null,
                     tint = Color(0xFFFFB800),
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(14.dp)
                 )
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(3.dp))
                 Text(
                     text = "${product.rating}",
-                    style = MaterialTheme.typography.bodySmall.copy(
+                    style = TextStyle(
                         fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
-                    ),
-                    color = Color.Black
+                        fontSize = 11.5.sp,
+                        lineHeight = 14.sp,
+                        color = Color(0xFF111827),
+                        platformStyle = PlatformTextStyle(includeFontPadding = false)
+                    )
                 )
                 Text(
                     text = "  |  ",
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     color = Color(0xFFD0D0D0)
                 )
                 Box(
                     modifier = Modifier
-                        .background(Color(0xFFF2F2F2), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                        .background(Color(0xFFF3F4F6), RoundedCornerShape(5.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
                         text = "Đã bán ${product.soldCount}",
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                        color = Color.Gray
+                        style = TextStyle(
+                            fontSize = 10.5.sp,
+                            lineHeight = 12.sp,
+                            color = Color(0xFF6B7280),
+                            platformStyle = PlatformTextStyle(includeFontPadding = false)
+                        ),
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            // 4. GIÁ TIỀN (VND)
-            Column(
-                modifier = Modifier.fillMaxWidth()
+            // 4. GIÁ TIỀN (VND) & % GIẢM GIÁ
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                if (product.originalPrice != null && product.badge == ProductBadge.SALE && !product.isOutOfStock) {
-                    Text(
-                        text = "${formatCurrencyVND(product.originalPrice)} đ",
-                        modifier = Modifier.padding(horizontal = 2.5.dp),
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            textDecoration = TextDecoration.LineThrough
-                        ),
-                        color = Color.Gray,
-                        fontSize = 10.sp,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Clip
-                    )
-                }
-
                 Text(
-                    text = "${formatCurrencyVND(product.currentPrice)} đ",
-                    modifier = Modifier.padding(horizontal = 2.5.dp),
-                    style = MaterialTheme.typography.titleMedium.copy(
+                    text = "${formatCurrencyVND(product.currentPrice)}đ",
+                    style = TextStyle(
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 13.5.sp
+                        fontSize = 14.sp,
+                        lineHeight = 17.sp,
+                        color = if (product.isOutOfStock) Color.Gray else Color(0xFF111827)
                     ),
-                    color = if (product.isOutOfStock) Color.Gray else Color.Black,
                     maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Clip
+                    softWrap = false
+                )
+
+                if (product.discountPercent > 0 && !product.isOutOfStock) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(0xFFFFEBEE))
+                            .padding(horizontal = 4.5.dp, vertical = 1.5.dp)
+                    ) {
+                        Text(
+                            text = "-${product.discountPercent}%",
+                            style = TextStyle(
+                                color = Color(0xFFE53935),
+                                fontSize = 9.5.sp,
+                                lineHeight = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                platformStyle = PlatformTextStyle(includeFontPadding = false)
+                            ),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+            }
+
+            if (product.originalPrice != null && product.originalPrice > product.currentPrice && !product.isOutOfStock) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "${formatCurrencyVND(product.originalPrice)}đ",
+                    style = TextStyle(
+                        textDecoration = TextDecoration.LineThrough,
+                        color = Color(0xFF9CA3AF),
+                        fontSize = 11.sp,
+                        lineHeight = 14.sp
+                    ),
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
         }

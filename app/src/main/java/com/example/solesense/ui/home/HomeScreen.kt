@@ -8,13 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,26 +28,28 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.solesense.model.catalog.Brand
 import com.example.solesense.model.catalog.ProductModel
 import com.example.solesense.repository.FavoriteRepository
+import com.example.solesense.repository.NotificationRepository
 import com.example.solesense.ui.components.LoginRequiredDialog
 import com.example.solesense.ui.components.NetworkStatusBanner
 import com.example.solesense.ui.components.SearchBar
+import com.example.solesense.ui.explore.ExploreFilterStateHolder
 import com.example.solesense.ui.home.components.BrandSection
 import com.example.solesense.ui.home.components.HomeHeader
 import com.example.solesense.ui.home.components.NewArrivalsSection
+import com.example.solesense.ui.home.components.PromotionCarousel
 import com.example.solesense.ui.home.components.TrendingProductsSection
 import com.example.solesense.ui.home.components.recommendedSection
+import com.example.solesense.utils.AssetConfig
+import com.example.solesense.utils.PromoBannerItem
 import com.example.solesense.utils.UserSessionManager
 import kotlinx.coroutines.launch
 
@@ -61,6 +60,7 @@ fun HomeScreen(
     onNavigateToLogin: () -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
     onNavigateToFavorites: () -> Unit = {},
+    onNavigateToNotifications: () -> Unit = {},
     onProductClick: (String) -> Unit = {},
     viewModel: HomeViewModel = viewModel(),
     modifier: Modifier = Modifier
@@ -107,6 +107,7 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     HomeScreenContent(
+                        banners = state.banners,
                         brands = state.brands,
                         trendingProducts = state.trendingProducts,
                         newArrivals = state.newArrivals,
@@ -115,6 +116,7 @@ fun HomeScreen(
                         onNavigateToLogin = onNavigateToLogin,
                         onNavigateToProfile = onNavigateToProfile,
                         onNavigateToFavorites = onNavigateToFavorites,
+                        onNavigateToNotifications = onNavigateToNotifications,
                         onProductClick = onProductClick
                     )
                 }
@@ -125,6 +127,7 @@ fun HomeScreen(
 
 @Composable
 fun HomeScreenContent(
+    banners: List<PromoBannerItem> = AssetConfig.DEFAULT_BANNERS,
     brands: List<Brand> = emptyList(),
     trendingProducts: List<ProductModel>,
     newArrivals: List<ProductModel>,
@@ -133,6 +136,7 @@ fun HomeScreenContent(
     onNavigateToLogin: () -> Unit,
     onNavigateToProfile: () -> Unit = {},
     onNavigateToFavorites: () -> Unit = {},
+    onNavigateToNotifications: () -> Unit = {},
     onProductClick: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -145,12 +149,14 @@ fun HomeScreenContent(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val favoriteRepository = remember { FavoriteRepository() }
+    val notificationRepository = remember { NotificationRepository() }
 
     var showLoginRequiredDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentUser?.userId, isReadOnlyPreview) {
         if (currentUser != null && !isReadOnlyPreview) {
             favoriteRepository.loadFavoriteProductIds(currentUser!!.userId)
+            notificationRepository.getUserNotifications(currentUser!!.userId)
         }
     }
 
@@ -184,7 +190,7 @@ fun HomeScreenContent(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        // 1. Header & Search (Ấn tìm kiếm chuyển sang tab Khám phá)
+        // 1. Header & Search (Ấn tìm kiếm hoặc nút lọc chuyển sang tab Khám phá)
         item(span = { GridItemSpan(2) }) {
             Column {
                 HomeHeader(
@@ -197,7 +203,7 @@ fun HomeScreenContent(
                         if (!isLoggedIn) {
                             showLoginRequiredDialog = true
                         } else {
-                            Toast.makeText(context, "Chức năng thông báo sẽ cập nhật sau", Toast.LENGTH_SHORT).show()
+                            onNavigateToNotifications()
                         }
                     },
                     onFavoriteClick = {
@@ -214,58 +220,64 @@ fun HomeScreenContent(
                         }
                     }
                 )
-                SearchBar(onClick = onNavigateToExplore)
+                SearchBar(
+                    onClick = onNavigateToExplore,
+                    onFilterClick = {
+                        ExploreFilterStateHolder.navigateWithFilterSheet()
+                        onNavigateToExplore()
+                    }
+                )
             }
         }
 
-        // 2. Banner Khuyến mãi
+        // 2. Banner Khuyến mãi (Tự động chạy từ trái qua phải & vuốt qua lại)
         item(span = { GridItemSpan(2) }) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(130.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFF6C5CE7)),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Column(modifier = Modifier.padding(24.dp)) {
-                    Text("50 %", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("Discount", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                }
-            }
-        }
-
-        // 3. Danh mục Brand (Ấn vào chuyển sang tab Khám phá)
-        item(span = { GridItemSpan(2) }) {
-            BrandSection(
-                brands = brands,
-                onBrandClick = { _ ->
+            PromotionCarousel(
+                banners = banners,
+                onBannerClick = {
                     onNavigateToExplore()
                 }
             )
         }
 
-        // 4. TrendingProductsSection
+        // 3. Danh mục Thương hiệu (Ấn vào lọc riêng thương hiệu đó trên màn hình Khám phá)
+        item(span = { GridItemSpan(2) }) {
+            BrandSection(
+                brands = brands,
+                onBrandClick = { brand ->
+                    ExploreFilterStateHolder.navigateWithBrand(brand.brandId)
+                    onNavigateToExplore()
+                }
+            )
+        }
+
+        // 4. Thịnh hành (TrendingProductsSection)
         item(span = { GridItemSpan(2) }) {
             TrendingProductsSection(
                 products = trendingProducts,
-                onSeeAllClick = onNavigateToExplore,
+                onSeeAllClick = {
+                    ExploreFilterStateHolder.navigateWithSort("POPULAR")
+                    onNavigateToExplore()
+                },
                 onFavoriteClick = { product -> handleProductFavoriteToggle(product) },
                 onProductClick = { product -> onProductClick(product.id) }
             )
         }
 
-        // 5. NewArrivalsSection
+        // 5. Hàng mới về (NewArrivalsSection)
         item(span = { GridItemSpan(2) }) {
             NewArrivalsSection(
                 products = newArrivals,
-                onSeeAllClick = onNavigateToExplore,
+                onSeeAllClick = {
+                    ExploreFilterStateHolder.navigateWithSort("NEWEST")
+                    onNavigateToExplore()
+                },
                 onFavoriteClick = { product -> handleProductFavoriteToggle(product) },
                 onProductClick = { product -> onProductClick(product.id) }
             )
         }
 
-        // 6. RecommendedSection
+        // 6. Gợi ý cho bạn (RecommendedSection)
         recommendedSection(
             products = recommendedProducts,
             onFavoriteClick = { product -> handleProductFavoriteToggle(product) },

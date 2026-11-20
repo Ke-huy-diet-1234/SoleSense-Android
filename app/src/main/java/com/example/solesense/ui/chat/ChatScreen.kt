@@ -52,7 +52,10 @@ import com.example.solesense.R
 import com.example.solesense.model.catalog.Product
 import com.example.solesense.model.chat.Chat
 import com.example.solesense.model.chat.Message
+import com.example.solesense.repository.CartRepository
 import com.example.solesense.ui.components.LoginRequiredDialog
+import com.example.solesense.ui.components.NetworkStatusBanner
+import com.example.solesense.utils.NetworkConnectivityObserver
 import com.example.solesense.utils.UserSessionManager
 import java.text.NumberFormat
 import java.util.Locale
@@ -67,12 +70,19 @@ fun ChatScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val connectivityObserver = remember { NetworkConnectivityObserver(context) }
+    val isOnline by connectivityObserver.isOnline.collectAsState(initial = true)
     val currentUser by UserSessionManager.currentUser.collectAsState()
     val isLoggedIn = currentUser != null
     var showLoginRequiredDialog by remember { mutableStateOf(!isLoggedIn) }
 
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
+
+    // Khi người dùng mở màn hình Chat -> Đánh dấu đã đọc hết tin nhắn, xóa số đỏ trên BottomBar
+    LaunchedEffect(Unit) {
+        CartRepository.setUnreadMessageCount(0)
+    }
 
     // Gom gọn các tin nhắn SYSTEM liên tiếp nhau (chỉ giữ tin SYSTEM mới nhất trong chuỗi liên tiếp)
     // để tránh làm loãng khung chat khi khách bấm chuyển/hủy nhiều lần
@@ -113,6 +123,12 @@ fun ChatScreen(
             onHandoffClick = { viewModel.onHandoffToStaffClick() },
             onCancelHandoffClick = { viewModel.cancelWaitingHandoff() },
             onReturnToAiClick = { viewModel.promptReturnToAi() }
+        )
+
+        // BANNER BÁO MẤT MẠNG TRONG KHUNG CHAT (Ảnh 5)
+        NetworkStatusBanner(
+            isOnline = isOnline,
+            message = "Không có kết nối mạng • Không thể gửi tin nhắn lúc này"
         )
 
         // 2. BANNER GHIM SẢN PHẨM ĐANG QUAN TÂM (TỪ FAB PRODUCT DETAIL)
@@ -256,13 +272,24 @@ fun ChatScreen(
                 }
             }
 
-            // 4. THANH NHẬP TIN NHẮN (Sát khít thanh BottomBar, không còn khoảng trống thừa)
+            // 4. THANH NHẬP TIN NHẮN (Đã xử lý khóa gửi khi mất mạng & chống che khuất khi mở bàn phím)
             ChatInputBar(
                 text = uiState.inputText,
                 onTextChanged = viewModel::onInputTextChanged,
-                onSendClick = viewModel::sendCurrentInput,
-                enabled = !uiState.isLoading && !isAiCurrentlyProcessing,
+                onSendClick = {
+                    if (!isOnline) {
+                        Toast.makeText(
+                            context,
+                            "Không có kết nối mạng! Vui lòng kiểm tra Internet trước khi gửi tin nhắn.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        viewModel.sendCurrentInput()
+                    }
+                },
+                enabled = isOnline && !uiState.isLoading && !isAiCurrentlyProcessing,
                 placeholderText = when {
+                    !isOnline -> "Đang mất kết nối mạng..."
                     isAiCurrentlyProcessing -> "SoleSense AI đang trả lời..."
                     uiState.chat?.mode == "HUMAN" && uiState.chat?.status == "WAITING" -> "Nhắn thêm thông tin cho nhân viên..."
                     uiState.chat?.mode == "HUMAN" -> "Nhắn tin với nhân viên hỗ trợ..."
@@ -907,6 +934,48 @@ fun AiMessageItem(
                 }
             }
 
+            // Thẻ đánh giá sao vui vẻ ngay trong khung chat khi khách kết thúc cuộc trò chuyện (Ảnh 6)
+            if (message.eventCode == "AI_ENDED_RATING" && message.sendStatus == "COMPLETED") {
+                var inlineSelectedStars by remember { mutableIntStateOf(0) }
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, Color(0xFFE5E7EB)),
+                    modifier = Modifier.widthIn(max = 300.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = if (inlineSelectedStars > 0) {
+                                "🎉 Cảm ơn bạn đã đánh giá $inlineSelectedStars/5 sao!"
+                            } else {
+                                "Bạn có hài lòng với tư vấn của AI không?"
+                            },
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.5.sp,
+                            color = if (inlineSelectedStars > 0) Color(0xFF16A34A) else Color(0xFF1F2937),
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            for (star in 1..5) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = "$star sao",
+                                    tint = if (star <= inlineSelectedStars) Color(0xFFFFB300) else Color(0xFFD1D5DB),
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clickable { inlineSelectedStars = star }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Danh sách card sản phẩm AI đề xuất (Chỉ hiển thị các sản phẩm thực sự tồn tại trong Firestore)
             val validRecommendedIds = message.recommendedProductIds.distinct().filter { productsMap.containsKey(it) }
             if (validRecommendedIds.isNotEmpty() && message.sendStatus == "COMPLETED") {
@@ -1185,43 +1254,32 @@ fun ChatInputBar(
 ) {
     Surface(
         color = Color.White,
-        shadowElevation = 2.dp
+        shadowElevation = 4.dp
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             HorizontalDivider(thickness = 0.5.dp, color = Color(0xFFEEEEEE))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 5.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(36.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(Color(0xFFF3F4F6))
-                        .padding(horizontal = 14.dp),
+                        .heightIn(min = 42.dp)
+                        .clip(RoundedCornerShape(21.dp))
+                        .background(if (enabled) Color(0xFFF3F4F6) else Color(0xFFECEEF2))
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     contentAlignment = Alignment.CenterStart
                 ) {
-                    if (text.isEmpty()) {
-                        Text(
-                            text = placeholderText,
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontSize = 13.sp,
-                                color = Color(0xFF9E9E9E)
-                            ),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
                     BasicTextField(
                         value = text,
                         onValueChange = onTextChanged,
                         enabled = enabled,
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 13.5.sp,
+                            fontSize = 14.sp,
                             color = Color(0xFF1A1A1A)
                         ),
                         cursorBrush = SolidColor(Color(0xFF1E1E1E)),
@@ -1229,7 +1287,23 @@ fun ChatInputBar(
                         keyboardActions = KeyboardActions(onSend = {
                             if (enabled && text.isNotBlank()) onSendClick()
                         }),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        decorationBox = { innerTextField ->
+                            Box(contentAlignment = Alignment.CenterStart) {
+                                if (text.isEmpty()) {
+                                    Text(
+                                        text = placeholderText,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontSize = 13.5.sp,
+                                            color = Color(0xFF9E9E9E)
+                                        ),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
                     )
                 }
 
@@ -1237,9 +1311,9 @@ fun ChatInputBar(
 
                 Surface(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(42.dp)
                         .clip(CircleShape)
-                        .clickable(enabled = enabled && text.isNotBlank()) { onSendClick() },
+                        .clickable { onSendClick() },
                     shape = CircleShape,
                     color = if (enabled && text.isNotBlank()) Color(0xFF1E1E1E) else Color(0xFFE0E0E0)
                 ) {
@@ -1248,7 +1322,7 @@ fun ChatInputBar(
                             painter = painterResource(id = R.drawable.ic_send),
                             contentDescription = "Gửi",
                             tint = Color.White,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }

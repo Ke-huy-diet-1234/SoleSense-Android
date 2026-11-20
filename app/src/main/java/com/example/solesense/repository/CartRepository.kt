@@ -31,12 +31,21 @@ class CartRepository {
             val rawItems = snapshot.toObjects(CartItem::class.java)
                 .sortedByDescending { it.addedAt.seconds }
 
-            // Đồng bộ lại maxStock thực tế từ variants trên Firestore nếu có
+            // Đồng bộ lại maxStock và giá bán thực tế từ variants trên Firestore nếu có
             val syncedItems = rawItems.map { item ->
-                val actualStock = fetchVariantStock(item.productId, item.variantId, item.maxStock)
-                val safeMax = if (actualStock > 0) actualStock else item.maxStock.coerceAtLeast(1)
-                val safeQty = item.quantity.coerceIn(1, safeMax)
-                item.copy(quantity = safeQty, maxStock = safeMax)
+                val (actualStock, actualPrice) = fetchVariantStockAndPrice(
+                    productId = item.productId,
+                    variantId = item.variantId,
+                    fallbackStock = item.maxStock,
+                    fallbackPrice = item.unitPrice
+                )
+                val safeMax = actualStock.coerceAtLeast(0)
+                val safeQty = if (safeMax <= 0) item.quantity.coerceAtLeast(1) else item.quantity.coerceIn(1, safeMax)
+                item.copy(
+                    quantity = safeQty,
+                    maxStock = safeMax,
+                    unitPrice = if (actualPrice > 0.0) actualPrice else item.unitPrice
+                )
             }
 
             // Bộ đếm trên BottomBar chỉ tính số item giày khác nhau đã thêm (không tính tổng số lượng từng item)
@@ -47,8 +56,13 @@ class CartRepository {
         }
     }
 
-    private suspend fun fetchVariantStock(productId: String, variantId: String, fallback: Int): Int {
-        if (productId.isBlank() || variantId.isBlank()) return fallback.coerceAtLeast(1)
+    private suspend fun fetchVariantStockAndPrice(
+        productId: String,
+        variantId: String,
+        fallbackStock: Int,
+        fallbackPrice: Double
+    ): Pair<Int, Double> {
+        if (productId.isBlank() || variantId.isBlank()) return fallbackStock.coerceAtLeast(1) to fallbackPrice
         return try {
             val doc = db.collection("products")
                 .document(productId)
@@ -56,10 +70,16 @@ class CartRepository {
                 .document(variantId)
                 .get()
                 .await()
-            val variant = doc.toObject(Variant::class.java)
-            variant?.stock?.takeIf { it > 0 } ?: fallback.coerceAtLeast(1)
+            if (doc.exists()) {
+                val variant = doc.toObject(Variant::class.java)
+                val stock = variant?.stock ?: fallbackStock.coerceAtLeast(1)
+                val price = variant?.price?.takeIf { it > 0.0 } ?: fallbackPrice
+                stock to price
+            } else {
+                fallbackStock.coerceAtLeast(1) to fallbackPrice
+            }
         } catch (_: Exception) {
-            fallback.coerceAtLeast(1)
+            fallbackStock.coerceAtLeast(1) to fallbackPrice
         }
     }
 
@@ -185,7 +205,7 @@ class CartRepository {
         private val _distinctCartItemCount = MutableStateFlow(0)
         val distinctCartItemCount: StateFlow<Int> = _distinctCartItemCount.asStateFlow()
 
-        private val _unreadMessageCount = MutableStateFlow(1)
+        private val _unreadMessageCount = MutableStateFlow(0)
         val unreadMessageCount: StateFlow<Int> = _unreadMessageCount.asStateFlow()
 
         fun setUnreadMessageCount(count: Int) {

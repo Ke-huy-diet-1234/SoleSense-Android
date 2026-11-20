@@ -19,9 +19,11 @@ object CheckoutSessionHolder {
     }
 
     fun consumeItems(): List<OrderItem> {
-        val items = pendingItems
+        return pendingItems
+    }
+
+    fun clearSession() {
         pendingItems = emptyList()
-        return items
     }
 }
 
@@ -30,6 +32,7 @@ data class CheckoutUiState(
     val isSubmittingOrder: Boolean = false,
     val errorMessage: String? = null,
     val isOrderSuccess: Boolean = false,
+    val completedOrder: Order? = null,
 
     // 1. Thông tin người nhận
     val selectedAddress: Address? = null,
@@ -43,10 +46,12 @@ data class CheckoutUiState(
     val appliedVoucher: Voucher? = null,
     val availableVouchers: List<Voucher> = emptyList(),
     val voucherError: String? = null,
+    val isVoucherSheetVisible: Boolean = false,
 
     // 4. Phương thức vận chuyển
     val shippingMethods: List<ShippingMethodUiModel> = emptyList(),
     val selectedShippingMethod: ShippingMethodUiModel? = null,
+    val isShippingMethodSheetVisible: Boolean = false,
 
     // 5. Phương thức thanh toán
     val selectedPaymentMethod: PaymentMethodType = PaymentMethodType.QR_CODE,

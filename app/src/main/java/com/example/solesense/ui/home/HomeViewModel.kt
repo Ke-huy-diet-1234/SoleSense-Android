@@ -5,11 +5,13 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.solesense.data.repository.ProductRepository
 import com.example.solesense.model.catalog.Brand
+import com.example.solesense.model.catalog.ProductBadge
 import com.example.solesense.model.catalog.ProductModel
 import com.example.solesense.repository.BrandRepository
-import com.example.solesense.repository.VoucherRepository
+import com.example.solesense.utils.AssetConfig
 import com.example.solesense.utils.DatabaseSeeder
 import com.example.solesense.utils.NetworkConnectivityObserver
+import com.example.solesense.utils.PromoBannerItem
 import com.example.solesense.utils.toProductModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,10 +21,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-// Trạng thái Giao diện Trang chủ
 sealed interface HomeUiState {
     object Loading : HomeUiState
     data class Success(
+        val banners: List<PromoBannerItem> = AssetConfig.DEFAULT_BANNERS,
         val brands: List<Brand> = emptyList(),
         val trendingProducts: List<ProductModel>,
         val newArrivals: List<ProductModel>,
@@ -59,32 +61,58 @@ class HomeViewModel @JvmOverloads constructor(
                 _uiState.value = HomeUiState.Loading
             }
 
-            val vouchersCheck = VoucherRepository().getActiveVouchers().getOrDefault(emptyList())
-            if (vouchersCheck.isEmpty()) {
-                // Tự động khởi tạo các bảng còn thiếu (categories, vouchers, addresses, favorites, variants price) lên Firestore
-                DatabaseSeeder().seedMockDataToFirestore()
-            }
+            try {
+                DatabaseSeeder().ensureRichCatalogSeeded()
+            } catch (_: Exception) {}
 
             val productsDeferred = async { repository.getProducts(isForceRefresh = isForceRefresh) }
             val brandsDeferred = async { brandRepository.getActiveBrands() }
+            val bannersDeferred = async { AssetConfig.fetchGitHubIntroBanners() }
 
             val productsResult = productsDeferred.await()
             val brandsResult = brandsDeferred.await()
+            val banners = bannersDeferred.await()
 
             if (productsResult.isSuccess) {
                 val rawProducts = productsResult.getOrNull().orEmpty()
                 val allProductModels = rawProducts.map { it.toProductModel() }
                 val brands = brandsResult.getOrNull().orEmpty()
 
+                // 1. THỊNH HÀNH (Trending): Sắp xếp theo số lượng đã bán (rawSoldCount) thực tế giảm dần, ưu tiên còn hàng
+                val trendingList = allProductModels
+                    .sortedWith(
+                        compareBy<ProductModel> { it.isOutOfStock }
+                            .thenByDescending { it.rawSoldCount }
+                            .thenByDescending { it.rating }
+                    )
+                    .take(6)
+
+                // 2. HÀNG MỚI VỀ (New Arrivals): Ưu tiên sản phẩm có nhãn NEW và các mẫu mới phát hành (lượt bán thấp/mới tạo)
+                val newArrivalsList = allProductModels
+                    .sortedWith(
+                        compareBy<ProductModel> { it.isOutOfStock }
+                            .thenByDescending { it.badge == ProductBadge.NEW }
+                            .thenByDescending { it.createdAtSeconds }
+                            .thenBy { it.rawSoldCount }
+                    )
+                    .take(6)
+
+                // 3. GỢI Ý CHO BẠN (Recommended): Kết hợp điểm đánh giá cao (rating) và mức giảm giá tốt (discountPercent)
+                val recommendedList = allProductModels
+                    .sortedWith(
+                        compareBy<ProductModel> { it.isOutOfStock }
+                            .thenByDescending { it.rating * 20.0 + it.discountPercent }
+                    )
+
                 _uiState.value = HomeUiState.Success(
+                    banners = banners,
                     brands = brands,
-                    trendingProducts = allProductModels.sortedByDescending { it.soldCount },
-                    newArrivals = allProductModels,
-                    recommendedProducts = allProductModels
+                    trendingProducts = trendingList,
+                    newArrivals = newArrivalsList,
+                    recommendedProducts = recommendedList
                 )
             } else {
                 val exception = productsResult.exceptionOrNull()
-                // Nếu đang refresh mà lỗi (ví dụ không có mạng), giữ nguyên data cũ và chỉ tắt refreshing
                 if (!isForceRefresh || _uiState.value !is HomeUiState.Success) {
                     _uiState.value = HomeUiState.Error(
                         exception?.localizedMessage ?: "Không thể kết nối với máy chủ"

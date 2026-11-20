@@ -1,5 +1,6 @@
 package com.example.solesense.ui.navigation
 
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,11 +11,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -31,6 +34,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.solesense.data.repository.ProductRepository
+import com.example.solesense.repository.BrandRepository
 import com.example.solesense.repository.CartRepository
 import com.example.solesense.ui.address.ShippingAddressScreen
 import com.example.solesense.ui.admin.AdminDashboardScreen
@@ -44,15 +49,75 @@ import com.example.solesense.ui.checkout.CheckoutScreen
 import com.example.solesense.ui.explore.ExploreScreen
 import com.example.solesense.ui.favorite.FavoriteScreen
 import com.example.solesense.ui.home.HomeScreen
+import com.example.solesense.ui.notification.NotificationScreen
+import com.example.solesense.ui.onboarding.OnboardingScreen
+import com.example.solesense.ui.onboarding.WelcomeScreen
+import com.example.solesense.ui.order.MyOrdersScreen
 import com.example.solesense.ui.product.ProductDetailScreen
 import com.example.solesense.ui.product.ProductDetailViewModel
 import com.example.solesense.ui.profile.ProfileScreen
+import com.example.solesense.ui.profile.SetupProfileScreen
+import com.example.solesense.ui.splash.SplashScreen
 import com.example.solesense.ui.support.SupportDashboardScreen
 import com.example.solesense.utils.AppAuthSessionState
+import com.example.solesense.utils.AssetConfig
 import com.example.solesense.utils.UserSessionManager
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 
 @Composable
 fun MainScreen() {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("solesense_prefs", Context.MODE_PRIVATE) }
+
+    var isSplashLoading by rememberSaveable { mutableStateOf(true) }
+    var hasSeenOnboarding by rememberSaveable {
+        mutableStateOf(prefs.getBoolean("has_seen_onboarding", false))
+    }
+    // 0 = WelcomeScreen (lướt nhanh), 1 = OnboardingScreen (3 hình có Next)
+    var onboardingSubStep by rememberSaveable { mutableIntStateOf(0) }
+
+    // Mở ứng dụng: Hiện màn hình Splash, trong lúc đó preload dữ liệu Trang chủ luôn
+    LaunchedEffect(Unit) {
+        val minDisplayJob = async { delay(1000) }
+        val preloadJob = async {
+            withTimeoutOrNull(3500) {
+                val pJob = async { runCatching { ProductRepository().getProducts() } }
+                val bJob = async { runCatching { BrandRepository().getActiveBrands() } }
+                val bannerJob = async { runCatching { AssetConfig.fetchGitHubIntroBanners() } }
+                pJob.await()
+                bJob.await()
+                bannerJob.await()
+            }
+        }
+        minDisplayJob.await()
+        preloadJob.await()
+        isSplashLoading = false
+    }
+
+    if (isSplashLoading) {
+        SplashScreen()
+        return
+    }
+
+    // Chỉ hiển thị lần đầu sau khi cài app: WelcomeScreen (lướt nhanh) -> 3 hình Onboarding có Next -> Trang chủ
+    if (!hasSeenOnboarding) {
+        if (onboardingSubStep == 0) {
+            WelcomeScreen(
+                onContinue = { onboardingSubStep = 1 }
+            )
+        } else {
+            OnboardingScreen(
+                onComplete = {
+                    prefs.edit().putBoolean("has_seen_onboarding", true).apply()
+                    hasSeenOnboarding = true
+                }
+            )
+        }
+        return
+    }
+
     val sessionState by UserSessionManager.sessionState.collectAsState()
     var previewCustomerStorefront by remember { mutableStateOf(false) }
 
@@ -101,10 +166,11 @@ fun MainScreen() {
 
     val currentRole = (sessionState as? AppAuthSessionState.Authenticated)?.user?.role?.uppercase() ?: ""
     val isStaffOrAdminPreview = previewCustomerStorefront && currentRole in setOf("ADMIN", "SUPPORT")
+    val isImeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
     Scaffold(
         bottomBar = {
-            if (currentRoute in bottomBarRoutes) {
+            if (currentRoute in bottomBarRoutes && !isImeVisible) {
                 AppBottomNavigationBar(
                     navController = navController,
                     isReadOnlyPreview = isStaffOrAdminPreview,
@@ -114,7 +180,13 @@ fun MainScreen() {
         }
     ) { innerPadding ->
         val contentModifier = if (currentRoute in bottomBarRoutes) {
-            Modifier.padding(innerPadding)
+            if (isImeVisible) {
+                Modifier
+                    .padding(top = innerPadding.calculateTopPadding())
+                    .imePadding()
+            } else {
+                Modifier.padding(innerPadding)
+            }
         } else {
             Modifier
         }
@@ -429,6 +501,9 @@ fun AppNavHost(
                 onNavigateToFavorites = {
                     navController.navigate("favorites")
                 },
+                onNavigateToNotifications = {
+                    navController.navigate("notifications")
+                },
                 onProductClick = { productId ->
                     navController.navigate("product_detail/$productId")
                 }
@@ -436,7 +511,17 @@ fun AppNavHost(
         }
 
         composable(Screen.Explore.route) {
-            ExploreScreen()
+            ExploreScreen(
+                onProductClick = { productId ->
+                    navController.navigate("product_detail/$productId")
+                },
+                onNavigateToNotifications = {
+                    navController.navigate("notifications")
+                },
+                onNavigateToLogin = {
+                    navController.navigate("auth_options")
+                }
+            )
         }
 
         composable(Screen.Cart.route) {
@@ -476,13 +561,100 @@ fun AppNavHost(
                 onNavigateToAuth = {
                     navController.navigate("auth_options")
                 },
+                onNavigateToSetupProfile = {
+                    navController.navigate("setup_profile?isOnboarding=false")
+                },
                 onNavigateToAddresses = {
                     navController.navigate("shipping_addresses")
+                },
+                onNavigateToOrders = {
+                    navController.navigate("my_orders")
+                },
+                onNavigateToNotifications = {
+                    navController.navigate("notifications")
                 },
                 onNavigateToFavorites = {
                     navController.navigate("favorites")
                 },
                 onSwitchToRoleDashboard = onReturnToRoleDashboard
+            )
+        }
+
+        composable(
+            route = "setup_profile?isOnboarding={isOnboarding}",
+            arguments = listOf(
+                navArgument("isOnboarding") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                }
+            )
+        ) { backStackEntry ->
+            val isOnboarding = backStackEntry.arguments?.getBoolean("isOnboarding") ?: false
+            SetupProfileScreen(
+                isInitialOnboardingSetup = isOnboarding,
+                onBackClick = {
+                    if (isOnboarding) {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.Home.route) { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    } else {
+                        navController.popBackStack()
+                    }
+                },
+                onCompleted = {
+                    if (isOnboarding) {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.Home.route) { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    } else {
+                        navController.popBackStack()
+                    }
+                }
+            )
+        }
+
+        composable(
+            route = "my_orders?orderId={orderId}",
+            arguments = listOf(
+                navArgument("orderId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val orderId = backStackEntry.arguments?.getString("orderId")
+            MyOrdersScreen(
+                initialOrderIdToTrack = orderId,
+                onBackClick = { navController.popBackStack() },
+                onBuyAgainProductClick = { productId ->
+                    navController.navigate("product_detail/$productId")
+                }
+            )
+        }
+
+        composable(route = "notifications") {
+            NotificationScreen(
+                onBackClick = { navController.popBackStack() },
+                onNavigateToOrder = { relatedOrderId ->
+                    if (relatedOrderId.isNotBlank()) {
+                        navController.navigate("my_orders?orderId=$relatedOrderId")
+                    } else {
+                        navController.navigate("my_orders")
+                    }
+                },
+                onNavigateToChat = {
+                    navController.navigate(Screen.Chat.route) {
+                        launchSingleTop = true
+                    }
+                },
+                onNavigateToExplore = {
+                    navController.navigate(Screen.Explore.route) {
+                        launchSingleTop = true
+                    }
+                }
             )
         }
 
@@ -533,6 +705,9 @@ fun AppNavHost(
                         launchSingleTop = true
                     }
                 },
+                onRelatedProductClick = { relatedProductId ->
+                    navController.navigate("product_detail/$relatedProductId")
+                },
                 onReturnToRoleDashboard = onReturnToRoleDashboard
             )
         }
@@ -542,6 +717,11 @@ fun AppNavHost(
                 onBackClick = { navController.popBackStack() },
                 onOrderSuccess = {
                     navController.popBackStack(Screen.Home.route, inclusive = false)
+                },
+                onTrackOrderClick = { orderId ->
+                    navController.navigate("my_orders?orderId=$orderId") {
+                        popUpTo("checkout") { inclusive = true }
+                    }
                 }
             )
         }
@@ -560,7 +740,13 @@ fun AppNavHost(
                 onNavigateToRegister = { navController.navigate("register") },
                 onLoginSuccess = { user ->
                     UserSessionManager.onLoginSuccess(user)
-                    navController.popBackStack()
+                    if (user.role.uppercase() == "CUSTOMER" && !user.isProfileCompleted && user.defaultAddress.isNullOrBlank()) {
+                        navController.navigate("setup_profile?isOnboarding=true") {
+                            popUpTo("auth_options") { inclusive = true }
+                        }
+                    } else {
+                        navController.popBackStack()
+                    }
                 }
             )
         }
@@ -569,8 +755,15 @@ fun AppNavHost(
             EmailLoginScreen(
                 onBackClick = { navController.popBackStack() },
                 onNavigateToRegister = { navController.navigate("register") },
-                onLoginSuccess = { _ ->
-                    navController.popBackStack("auth_options", inclusive = true)
+                onLoginSuccess = { user ->
+                    UserSessionManager.onLoginSuccess(user)
+                    if (user.role.uppercase() == "CUSTOMER" && !user.isProfileCompleted && user.defaultAddress.isNullOrBlank()) {
+                        navController.navigate("setup_profile?isOnboarding=true") {
+                            popUpTo("auth_options") { inclusive = true }
+                        }
+                    } else {
+                        navController.popBackStack("auth_options", inclusive = true)
+                    }
                 }
             )
         }
@@ -579,8 +772,12 @@ fun AppNavHost(
             RegisterScreen(
                 onBackClick = { navController.popBackStack() },
                 onNavigateToLogin = { navController.popBackStack() },
-                onRegisterSuccess = { _ ->
-                    navController.popBackStack("auth_options", inclusive = true)
+                onRegisterSuccess = { user ->
+                    UserSessionManager.onLoginSuccess(user)
+                    // Khi mới tạo tài khoản, đi đến phần cập nhật thông tin & lưu làm mặc định
+                    navController.navigate("setup_profile?isOnboarding=true") {
+                        popUpTo("auth_options") { inclusive = true }
+                    }
                 }
             )
         }

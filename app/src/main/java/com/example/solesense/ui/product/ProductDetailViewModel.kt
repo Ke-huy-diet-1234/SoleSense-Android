@@ -10,8 +10,12 @@ import com.example.solesense.model.order.CartItem
 import com.example.solesense.model.order.OrderItem
 import com.example.solesense.repository.CartRepository
 import com.example.solesense.repository.FavoriteRepository
+import com.example.solesense.repository.ReviewRepository
 import com.example.solesense.ui.checkout.CheckoutSessionHolder
+import com.example.solesense.ui.product.components.ReviewUiModel
 import com.example.solesense.utils.UserSessionManager
+import java.text.SimpleDateFormat
+import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,6 +29,7 @@ class ProductDetailViewModel(
     private val repository = ProductRepository()
     private val favoriteRepository = FavoriteRepository()
     private val cartRepository = CartRepository()
+    private val reviewRepository = ReviewRepository()
 
     private val _uiState = MutableStateFlow(ProductDetailUiState())
     val uiState: StateFlow<ProductDetailUiState> = _uiState.asStateFlow()
@@ -85,6 +90,36 @@ class ProductDetailViewModel(
                 } else {
                     false
                 }
+
+                val sdf = SimpleDateFormat("dd/MM/yyyy", Locale("vi", "VN"))
+                val fetchedReviews = reviewRepository.getProductReviews(productId).getOrDefault(emptyList()).map { r ->
+                    ReviewUiModel(
+                        id = r.reviewId,
+                        userName = r.userName.ifBlank { "Khách hàng SoleSense" },
+                        userAvatarUrl = r.userAvatarUrl,
+                        rating = r.rating,
+                        date = r.createdAt.toDate().let { sdf.format(it) },
+                        content = r.comment ?: "",
+                        variantInfo = r.variantInfo.ifBlank { "Phân loại tiêu chuẩn" },
+                        imageUrls = r.imageUrls,
+                        storeReply = r.storeReply
+                    )
+                }
+
+                // Tải danh sách sản phẩm tương tự (cùng danh mục, thương hiệu hoặc mục đích sử dụng)
+                val allActiveProducts = repository.getProducts().getOrDefault(emptyList())
+                val related = allActiveProducts
+                    .filter { it.productId != productId && it.status.uppercase() != "DISABLED" }
+                    .sortedByDescending { candidate ->
+                        var score = 0
+                        if (candidate.categoryId == product.categoryId && product.categoryId.isNotBlank()) score += 3
+                        if (candidate.brandId == product.brandId && product.brandId.isNotBlank()) score += 2
+                        if (candidate.purpose == product.purpose && !product.purpose.isNullOrBlank()) score += 1
+                        score
+                    }
+                    .take(4)
+
+                _uiState.update { it.copy(reviews = fetchedReviews, relatedProducts = related) }
 
                 if (variants.isNotEmpty()) {
                     val normalizedVariants = variants.map { v ->

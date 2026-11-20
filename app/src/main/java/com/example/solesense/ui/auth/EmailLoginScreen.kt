@@ -46,6 +46,8 @@ fun EmailLoginScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showForgotPasswordDialog by remember { mutableStateOf(false) }
+    var resetEmailInput by remember { mutableStateOf("") }
 
     val isLoading = authState is AuthState.Loading
 
@@ -136,6 +138,27 @@ fun EmailLoginScreen(
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier.fillMaxWidth()
         )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp),
+            horizontalArrangement = Arrangement.End
+        ) {
+            Text(
+                text = "Quên mật khẩu?",
+                style = MaterialTheme.typography.bodySmall.copy(
+                    color = Color(0xFF1E88E5),
+                    fontWeight = FontWeight.Bold
+                ),
+                modifier = Modifier
+                    .clickable {
+                        resetEmailInput = email
+                        showForgotPasswordDialog = true
+                    }
+                    .padding(vertical = 4.dp, horizontal = 4.dp)
+            )
+        }
 
         if (!errorMessage.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(8.dp))
@@ -307,6 +330,75 @@ fun EmailLoginScreen(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+    }
+
+    if (showForgotPasswordDialog) {
+        AlertDialog(
+            onDismissRequest = { showForgotPasswordDialog = false },
+            containerColor = Color.White,
+            title = {
+                Text(
+                    text = "Đặt lại mật khẩu",
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Nhập địa chỉ email đăng ký tài khoản của bạn. Hệ thống sẽ gửi đường dẫn đặt lại mật khẩu qua email:",
+                        fontSize = 13.sp,
+                        color = Color(0xFF4B5563)
+                    )
+                    OutlinedTextField(
+                        value = resetEmailInput,
+                        onValueChange = { resetEmailInput = it },
+                        label = { Text("Email") },
+                        placeholder = { Text("vd: user@gmail.com") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val targetEmail = resetEmailInput.trim()
+                        if (targetEmail.isBlank() || !targetEmail.contains("@")) {
+                            Toast.makeText(context, "Vui lòng nhập địa chỉ email hợp lệ!", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        com.google.firebase.auth.FirebaseAuth.getInstance()
+                            .sendPasswordResetEmail(targetEmail)
+                            .addOnSuccessListener {
+                                showForgotPasswordDialog = false
+                                Toast.makeText(
+                                    context,
+                                    "Đã gửi email đặt lại mật khẩu tới $targetEmail! Vui lòng kiểm tra hộp thư.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                            .addOnFailureListener { e ->
+                                Toast.makeText(
+                                    context,
+                                    "Không thể gửi email: ${e.localizedMessage ?: "Kiểm tra lại địa chỉ email"}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A1A1A))
+                ) {
+                    Text("Gửi yêu cầu", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showForgotPasswordDialog = false }) {
+                    Text("Hủy", color = Color(0xFF4B5563))
+                }
+            }
+        )
     }
 }
 
