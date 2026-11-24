@@ -134,8 +134,12 @@ class VoucherRepository(
                     .limit(1)
                     .get()
                     .await()
-                snap.toObjects(Voucher::class.java).firstOrNull()
+                val doc = snap.documents.firstOrNull()
                     ?: return VoucherValidationResult.Invalid("Mã giảm giá không hợp lệ")
+                val v = doc.toObject(Voucher::class.java)
+                    ?: return VoucherValidationResult.Invalid("Mã giảm giá không hợp lệ")
+                val explicitEnabled = doc.getBoolean("isEnabled") ?: doc.getBoolean("enabled") ?: v.isEnabled
+                v.copy(voucherId = doc.id, isEnabled = explicitEnabled)
             }
             else -> return VoucherValidationResult.Invalid("Mã giảm giá không hợp lệ")
         }
@@ -203,7 +207,7 @@ class VoucherRepository(
         // 7. Đơn hàng có đạt giá trị tối thiểu không?
         if (applicableSubtotal < voucher.minOrderValue) {
             val missingAmount = voucher.minOrderValue - applicableSubtotal
-            val missingText = NumberFormat.getNumberInstance(Locale("vi", "VN")).format(missingAmount.toLong()) + "đ"
+            val missingText = NumberFormat.getNumberInstance(Locale.forLanguageTag("vi-VN")).format(missingAmount.toLong()) + "đ"
             return VoucherValidationResult.Invalid("Cần mua thêm $missingText để áp dụng voucher", missingAmount = missingAmount)
         }
 
@@ -316,7 +320,9 @@ class VoucherRepository(
     }
 
     /**
-     * Ghi nhận lịch sử sử dụng Voucher của khách hàng khi đơn hàng được đặt thành công
+     * Ghi nhận lịch sử sử dụng Voucher của khách hàng khi đơn hàng được đặt thành công.
+     * Sử dụng định danh tất định `usage_{orderId}_{voucherId}` để đảm bảo tính lũy đẳng (Idempotent)
+     * và cho phép hoàn trả hạn mức cá nhân (`perUserLimit`) chính xác khi đơn hàng bị hủy.
      */
     suspend fun recordVoucherUsage(
         userId: String,
@@ -327,7 +333,11 @@ class VoucherRepository(
     ) {
         if (userId.isBlank() || voucherId.isBlank()) return
         try {
-            val usageId = UUID.randomUUID().toString()
+            val usageId = if (orderId.isNotBlank()) {
+                "usage_${orderId}_${voucherId}"
+            } else {
+                UUID.randomUUID().toString()
+            }
             val usage = VoucherUsage(
                 usageId = usageId,
                 voucherId = voucherId,

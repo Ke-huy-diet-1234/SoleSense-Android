@@ -10,6 +10,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
 
+/**
+ * Repository quản lý danh sách Sản phẩm yêu thích (`users/{userId}/favorites/{productId}`).
+ *
+ * Hỗ trợ cập nhật lạc quan (Optimistic UI Update) qua `favoriteProductIds` StateFlow
+ * giúp biểu tượng trái tim trên mọi màn hình (Home, Explore, ProductDetail, Favorite)
+ * phản hồi tức thì trước khi đồng bộ xuống Cloud Firestore.
+ */
 class FavoriteRepository {
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
@@ -17,11 +24,11 @@ class FavoriteRepository {
     private fun getCurrentUserId(): String {
         return auth.currentUser?.uid
             ?: UserSessionManager.getActiveUserId()
-            ?: "mmZhfijntCf7BW2U0pf9VQbm4Xi1"
+            ?: ""
     }
 
     suspend fun loadFavoriteProductIds(userId: String = getCurrentUserId()): Set<String> {
-        if (!UserSessionManager.isAuthenticated()) {
+        if (!UserSessionManager.isAuthenticated() || userId.isBlank()) {
             _favoriteProductIds.value = emptySet()
             return emptySet()
         }
@@ -67,6 +74,7 @@ class FavoriteRepository {
         userId: String = getCurrentUserId()
     ): Result<Boolean> {
         if (productId.isBlank()) return Result.failure(IllegalArgumentException("ProductId rỗng"))
+        if (userId.isBlank()) return Result.failure(IllegalStateException("Vui lòng đăng nhập để lưu sản phẩm yêu thích"))
         val currentlyFav = _favoriteProductIds.value.contains(productId)
         // Optimistic update ngay lập tức trên toàn ứng dụng
         _favoriteProductIds.value = if (currentlyFav) {

@@ -91,7 +91,7 @@ class ProductDetailViewModel(
                     false
                 }
 
-                val sdf = SimpleDateFormat("dd/MM/yyyy", Locale("vi", "VN"))
+                val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.forLanguageTag("vi-VN"))
                 val fetchedReviews = reviewRepository.getProductReviews(productId).getOrDefault(emptyList()).map { r ->
                     ReviewUiModel(
                         id = r.reviewId,
@@ -138,7 +138,12 @@ class ProductDetailViewModel(
                     buildInitialState(product, fallbackVariants, isFav)
                 }
             } catch (e: Exception) {
-                loadMockData()
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.localizedMessage ?: "Không thể tải thông tin sản phẩm"
+                    )
+                }
             }
         }
     }
@@ -489,7 +494,6 @@ class ProductDetailViewModel(
 
             _uiState.update { currentState ->
                 currentState.copy(
-                    cartItemCount = currentState.cartItemCount + quantityToAdd,
                     isBottomSheetVisible = false
                 )
             }

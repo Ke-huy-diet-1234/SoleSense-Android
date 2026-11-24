@@ -26,6 +26,7 @@ import com.example.solesense.data.repository.ProductRepository
 import com.example.solesense.model.catalog.Product
 import com.example.solesense.model.order.Order
 import com.example.solesense.model.user.User
+import com.example.solesense.push.PushNavigationBus
 import com.example.solesense.ui.admin.notification.AdminNotificationManagementScreen
 import com.example.solesense.ui.admin.ops.AdminCustomerOpsScreen
 import com.example.solesense.ui.admin.order.AdminOrderManagementScreen
@@ -44,6 +45,42 @@ fun AdminDashboardScreen(
     onLogoutClick: () -> Unit
 ) {
     var activeSubScreen by remember { mutableStateOf<String?>(null) } // "VOUCHER", "ORDER", "NOTIFICATION", "PRODUCT", "OPS"
+    var activeOpsInitialTab by remember { mutableStateOf("USERS") }
+
+    // Lắng nghe Deep-Link khi Admin bấm vào Thông báo màn hình (FCM)
+    val pendingPushNav by PushNavigationBus.pendingNavigation.collectAsState()
+    LaunchedEffect(pendingPushNav) {
+        val nav = pendingPushNav ?: return@LaunchedEffect
+        val route = nav.deepLinkRoute
+        when (route) {
+            "admin_order" -> {
+                activeSubScreen = "ORDER"
+                PushNavigationBus.consume()
+            }
+            "admin_product" -> {
+                activeSubScreen = "PRODUCT"
+                PushNavigationBus.consume()
+            }
+            "admin_voucher" -> {
+                activeSubScreen = "VOUCHER"
+                PushNavigationBus.consume()
+            }
+            "admin_notification" -> {
+                activeSubScreen = "NOTIFICATION"
+                PushNavigationBus.consume()
+            }
+            "admin_ops_returns" -> {
+                activeOpsInitialTab = "RETURNS"
+                activeSubScreen = "OPS"
+                PushNavigationBus.consume()
+            }
+            "admin_ops_reviews" -> {
+                activeOpsInitialTab = "REVIEWS"
+                activeSubScreen = "OPS"
+                PushNavigationBus.consume()
+            }
+        }
+    }
 
     // Số liệu thống kê thực tế tải trực tiếp từ Firestore (Không dùng số liệu giả!)
     var isLoadingStats by remember { mutableStateOf(true) }
@@ -136,7 +173,11 @@ fun AdminDashboardScreen(
         "OPS" -> {
             AdminCustomerOpsScreen(
                 adminUid = user.userId,
-                onBackClick = { activeSubScreen = null }
+                initialTab = activeOpsInitialTab,
+                onBackClick = {
+                    activeSubScreen = null
+                    activeOpsInitialTab = "USERS"
+                }
             )
             return
         }

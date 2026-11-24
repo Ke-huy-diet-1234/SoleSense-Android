@@ -39,6 +39,8 @@ import com.example.solesense.model.chat.Message
 import com.example.solesense.model.order.Order
 import com.example.solesense.model.support.SupportRequest
 import com.example.solesense.model.user.User
+import com.example.solesense.push.PushForegroundTracker
+import com.example.solesense.push.PushNavigationBus
 import com.example.solesense.repository.ChatRepository
 import com.example.solesense.repository.OrderRepository
 import com.example.solesense.ui.admin.ops.AdminCustomerOpsScreen
@@ -59,6 +61,7 @@ fun SupportDashboardScreen(
     val chatRepository = remember { ChatRepository() }
 
     var showCustomerOpsSubScreen by remember { mutableStateOf(false) }
+    var opsInitialTab by remember { mutableStateOf("RETURNS") }
     var selectedTicketTab by remember { mutableStateOf("WAITING") } // WAITING, ASSIGNED, RESOLVED
 
     // Lắng nghe danh sách ticket đang phụ trách (ASSIGNED), đang chờ (WAITING) và đã hoàn tất (RESOLVED) realtime từ Firestore
@@ -74,10 +77,52 @@ fun SupportDashboardScreen(
     var isActiveChatReadOnly by remember { mutableStateOf(false) }
     var isChatSheetOpen by remember { mutableStateOf(false) }
 
+    // Lắng nghe Deep-Link khi Nhân viên CSKH bấm vào Thông báo màn hình (FCM)
+    val pendingPushNav by PushNavigationBus.pendingNavigation.collectAsState()
+    LaunchedEffect(pendingPushNav, assignedRequests) {
+        val nav = pendingPushNav ?: return@LaunchedEffect
+        when (nav.deepLinkRoute) {
+            "support_waiting" -> {
+                showCustomerOpsSubScreen = false
+                selectedTicketTab = "WAITING"
+                PushNavigationBus.consume()
+            }
+            "support_assigned" -> {
+                showCustomerOpsSubScreen = false
+                selectedTicketTab = "ASSIGNED"
+                val targetChat = nav.chatId
+                val matched = if (!targetChat.isNullOrBlank()) {
+                    assignedRequests.find { it.chatId == targetChat }
+                } else null
+                if (matched != null) {
+                    activeChatId = matched.chatId
+                    activeRequestId = matched.requestId
+                    activeCustomerName = matched.customerName
+                    activeCustomerUserId = matched.userId
+                    isActiveChatReadOnly = false
+                    isChatSheetOpen = true
+                    PushNavigationBus.consume()
+                } else if (targetChat.isNullOrBlank()) {
+                    PushNavigationBus.consume()
+                }
+            }
+            "support_ops_returns" -> {
+                opsInitialTab = "RETURNS"
+                showCustomerOpsSubScreen = true
+                PushNavigationBus.consume()
+            }
+            "support_ops_reviews" -> {
+                opsInitialTab = "REVIEWS"
+                showCustomerOpsSubScreen = true
+                PushNavigationBus.consume()
+            }
+        }
+    }
+
     if (showCustomerOpsSubScreen) {
         AdminCustomerOpsScreen(
             adminUid = user.userId,
-            initialTab = "RETURNS",
+            initialTab = opsInitialTab,
             onBackClick = { showCustomerOpsSubScreen = false }
         )
         return
@@ -699,7 +744,13 @@ private fun StaffLiveChatBottomSheet(
     }
 
     DisposableEffect(chatId) {
+        if (!isReadOnly) {
+            PushForegroundTracker.activeChatId = chatId
+        }
         onDispose {
+            if (PushForegroundTracker.activeChatId == chatId) {
+                PushForegroundTracker.activeChatId = null
+            }
             if (!isReadOnly) {
                 scope.launch {
                     chatRepository.setTypingStatus(chatId = chatId, isStaff = true, isTyping = false)

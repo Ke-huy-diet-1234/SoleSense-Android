@@ -136,6 +136,19 @@ class ReviewRepository {
                 }
             } catch (_: Exception) {}
 
+            // 4. Nếu đánh giá tiêu cực (1-2 sao), cảnh báo ngay cho bộ phận CSKH & Admin
+            if (review.rating <= 2) {
+                try {
+                    NotificationRepository().notifyNegativeReviewToStaff(
+                        reviewId = review.reviewId,
+                        productId = productId,
+                        userName = review.userName,
+                        rating = review.rating,
+                        comment = review.comment.orEmpty()
+                    )
+                } catch (_: Exception) {}
+            }
+
             Result.success(review)
         } catch (e: Exception) {
             Result.failure(e)

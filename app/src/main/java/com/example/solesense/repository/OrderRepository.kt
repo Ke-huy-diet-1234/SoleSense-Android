@@ -21,6 +21,20 @@ data class CreatedOrderResult(
     val payment: Payment?
 )
 
+/**
+ * Repository chịu trách nhiệm quản lý toàn bộ vòng đời Đơn hàng (Order), Thanh toán VietQR (Payment)
+ * và Biến động tồn kho (InventoryLog) trên Cloud Firestore.
+ *
+ * Các quyết định kỹ thuật quan trọng:
+ * 1. Mọi thao tác đặt hàng, duyệt thanh toán QR và hủy đơn đều thực thi bên trong Firestore Transaction
+ *    (tuân thủ quy tắc tất cả lệnh READ thực hiện trước lệnh WRITE) nhằm chống Race Condition khi nhiều
+ *    khách hàng đặt mua cùng một biến thể giày cuối cùng hoặc cùng sử dụng một mã giảm giá.
+ * 2. Cơ chế giữ hàng tạm thời 5 phút (300 giây) cho đơn VietQR: tồn kho biến thể được trừ ngay khi tạo đơn
+ *    và lượt dùng Voucher được đưa vào `reservedCount`. Nếu quá 5 phút chưa thanh toán, tồn kho và lượt giữ
+ *    voucher được giải phóng nguyên tử.
+ * 3. Đảm bảo tính lũy đẳng (Idempotency) khi xác nhận hoặc hủy đơn, ngăn chặn cộng/trừ tồn kho hoặc
+ *    lượt dùng voucher hai lần khi có xung đột giữa sự kiện hết hạn phía Client và thao tác duyệt phía Admin.
+ */
 class OrderRepository {
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
@@ -35,14 +49,16 @@ class OrderRepository {
     private fun getCurrentUserId(): String {
         return auth.currentUser?.uid
             ?: com.example.solesense.utils.UserSessionManager.getActiveUserId()
-            ?: "mmZhfijntCf7BW2U0pf9VQbm4Xi1"
+            ?: ""
     }
 
     /**
      * Tạo đơn hàng bằng Firestore Transaction:
-     * 1. Đọc & khóa kiểm tra tồn kho (stock >= quantity) của từng biến thể -> chống Race Condition khi 2 người tranh nhau 1 đôi giày cuối.
+     * 1. Đọc & khóa kiểm tra tồn kho (`stock >= quantity`) và trạng thái kinh doanh (`status != DISABLED`)
+     *    của từng biến thể cùng sản phẩm cha -> chống Race Condition khi 2 người tranh nhau 1 đôi giày cuối.
      * 2. Trừ ngay tồn kho (kể cả COD lẫn QR Code để khóa giữ hàng 5 phút cho người đặt).
-     * 3. Lưu Order + OrderItem (Snapshot giá & tên) + Payment (với mã VietQR & expiresAt = +5 phút) + InventoryLog.
+     * 3. Kiểm tra lại hiệu lực Voucher trong Transaction và tăng `usedCount` (COD) hoặc `reservedCount` (QR).
+     * 4. Lưu Order + OrderItem (Snapshot giá & tên) + Payment (với mã VietQR & `expiresAt = +5 phút`) + InventoryLog.
      */
     suspend fun createOrderWithTransaction(
         items: List<OrderItem>,
@@ -58,9 +74,17 @@ class OrderRepository {
         paymentMethod: String
     ): Result<CreatedOrderResult> {
         val userId = getCurrentUserId()
+        if (userId.isBlank()) {
+            return Result.failure(IllegalStateException("Vui lòng đăng nhập để đặt hàng!"))
+        }
+
+        val lowStockAlerts = mutableListOf<Triple<String, String, Int>>() // productId, "productName (variant)", newStock
+        var exhaustedVoucherAlert: Triple<String, String, Int>? = null // voucherId, code, usageLimit
 
         return try {
             val result = db.runTransaction { transaction ->
+                lowStockAlerts.clear()
+                exhaustedVoucherAlert = null
                 val now = Timestamp.now()
                 val orderCode = "SOLE${Random.nextInt(10000, 99999)}"
 
@@ -85,14 +109,23 @@ class OrderRepository {
                 } else null
                 val voucherSnap = voucherRef?.let { transaction.get(it) }
 
-                // BƯỚC 2: Kiểm tra tồn kho từng biến thể (Chống tranh chấp Race Condition)
+                // BƯỚC 2: Kiểm tra trạng thái kinh doanh & tồn kho từng biến thể (Chống tranh chấp Race Condition)
                 variantSnapshots.forEach { (item, _, snap) ->
+                    val parentSnap = productSnapshots[item.productId]?.second
+                    if (parentSnap != null && parentSnap.exists() &&
+                        parentSnap.getString("status")?.uppercase() == "DISABLED"
+                    ) {
+                        throw IllegalStateException("Sản phẩm ${item.productName} hiện đã ngừng kinh doanh!")
+                    }
                     if (!snap.exists()) {
                         throw IllegalStateException("Biến thể ${item.productName} (Size ${item.size}) không tồn tại trên hệ thống!")
                     }
                     val variant = snap.toObject(Variant::class.java)
                         ?: throw IllegalStateException("Không đọc được dữ liệu biến thể ${item.productName}")
 
+                    if (variant.status.uppercase() == "DISABLED") {
+                        throw IllegalStateException("Phiên bản ${item.productName} (${item.color} - Size ${item.size}) hiện đã ngừng kinh doanh!")
+                    }
                     if (variant.stock < item.quantity) {
                         if (variant.stock <= 0) {
                             throw IllegalStateException("Rất tiếc! ${item.productName} (Size ${item.size} - ${item.color}) vừa hết hàng!")
@@ -108,6 +141,15 @@ class OrderRepository {
                     val currentVariantSold = snap.getLong("soldCount")?.toInt() ?: 0
                     val newStock = currentStock - item.quantity
                     val newStatus = if (newStock <= 0) "OUT_OF_STOCK" else "ACTIVE"
+                    if (newStock <= 0 || (currentStock > 5 && newStock <= 5)) {
+                        lowStockAlerts.add(
+                            Triple(
+                                item.productId,
+                                "${item.productName} (${item.color} - Size ${item.size})",
+                                newStock
+                            )
+                        )
+                    }
 
                     transaction.update(
                         variantRef,
@@ -195,6 +237,10 @@ class OrderRepository {
                     } else {
                         transaction.update(voucherRef, "usedCount", usedCount + 1)
                     }
+                    if (usageLimit > 0 && (usedCount + reservedCount + 1) >= usageLimit) {
+                        val vCode = voucherSnap.getString("code") ?: voucherId.orEmpty()
+                        exhaustedVoucherAlert = Triple(voucherId.orEmpty(), vCode, usageLimit)
+                    }
                 }
 
                 // BƯỚC 5: Tạo Order và Subcollection items (Snapshot)
@@ -258,6 +304,31 @@ class OrderRepository {
                 CreatedOrderResult(order = order, payment = payment)
             }.await()
 
+            // Sau khi Transaction đặt hàng thành công, bắn cảnh báo kho / voucher cho Admin (không làm chậm/hỏng luồng chính)
+            if (lowStockAlerts.isNotEmpty() || exhaustedVoucherAlert != null) {
+                try {
+                    val notifRepo = NotificationRepository()
+                    lowStockAlerts.forEach { (pid, label, rem) ->
+                        val parts = label.split(" (", limit = 2)
+                        val pName = parts.firstOrNull().orEmpty()
+                        val vLabel = parts.getOrNull(1)?.removeSuffix(")").orEmpty()
+                        notifRepo.notifyLowStockAlertToAdmin(
+                            productId = pid,
+                            productName = pName,
+                            variantLabel = vLabel,
+                            remainingStock = rem
+                        )
+                    }
+                    exhaustedVoucherAlert?.let { (vid, vCode, limit) ->
+                        notifRepo.notifyVoucherExhaustedToAdmin(
+                            voucherId = vid,
+                            voucherCode = vCode,
+                            usageLimit = limit
+                        )
+                    }
+                } catch (_: Exception) {}
+            }
+
             Result.success(result)
         } catch (e: Exception) {
             Result.failure(e)
@@ -282,12 +353,18 @@ class OrderRepository {
                 val vSnap = voucherRef?.let { transaction.get(it) }
 
                 val expiresAt = paymentSnap.getTimestamp("expiresAt")
-                val currentStatus = paymentSnap.getString("status") ?: "PENDING"
-                val currentPaymentStatus = orderSnap.getString("paymentStatus") ?: "PENDING"
+                val currentStatus = (paymentSnap.getString("status") ?: "PENDING").uppercase()
+                val currentPaymentStatus = (orderSnap.getString("paymentStatus") ?: "PENDING").uppercase()
+                val currentOrderStatus = (orderSnap.getString("orderStatus") ?: "PENDING").uppercase()
 
                 // Chống gọi lặp (Idempotency)
                 if (currentStatus == "SUCCESS" || currentPaymentStatus == "SUCCESS" || currentPaymentStatus == "PAID") {
                     return@runTransaction
+                }
+
+                // Không cho phép xác nhận thanh toán nếu đơn hàng đã bị hủy và hoàn kho trước đó
+                if (currentOrderStatus == "CANCELLED") {
+                    throw IllegalStateException("Đơn hàng này đã bị hủy và hoàn kho, không thể xác nhận thanh toán!")
                 }
 
                 if (currentStatus == "EXPIRED" || (expiresAt != null && now.seconds > expiresAt.seconds)) {
@@ -358,7 +435,11 @@ class OrderRepository {
                 }
                 orderUserId = orderSnap.getString("userId") ?: ""
                 orderDiscount = orderSnap.getDouble("discount") ?: 0.0
-                val currentPaymentStatus = orderSnap.getString("paymentStatus") ?: "PENDING"
+                val currentPaymentStatus = (orderSnap.getString("paymentStatus") ?: "PENDING").uppercase()
+                val currentOrderStatus = (orderSnap.getString("orderStatus") ?: "PENDING").uppercase()
+                if (currentOrderStatus == "CANCELLED") {
+                    throw IllegalStateException("Đơn hàng này đã bị hủy và hoàn kho, không thể xác nhận thanh toán!")
+                }
                 val voucherId = orderSnap.getString("voucherId")
                 usedVoucherId = voucherId ?: ""
 
@@ -443,8 +524,19 @@ class OrderRepository {
 
                 // READ PHASE
                 val orderSnap = transaction.get(orderRef)
-                val currentOrderStatus = orderSnap.getString("orderStatus") ?: ""
-                if (currentOrderStatus == "CANCELLED") {
+                val paymentSnap = transaction.get(paymentRef)
+                val currentOrderStatus = (orderSnap.getString("orderStatus") ?: "").uppercase()
+                val currentPaymentStatus = (orderSnap.getString("paymentStatus") ?: "").uppercase()
+                val currentPaymentDocStatus = (paymentSnap.getString("status") ?: "").uppercase()
+
+                // Nếu đơn hàng đã hủy, hoặc ĐÃ ĐƯỢC THANH TOÁN / XÁC NHẬN (ví dụ Admin vừa duyệt khi máy khách tắt màn hình),
+                // tuyệt đối KHÔNG hủy đơn và KHÔNG hoàn kho!
+                if (currentOrderStatus == "CANCELLED" ||
+                    currentPaymentStatus == "SUCCESS" ||
+                    currentPaymentStatus == "PAID" ||
+                    currentPaymentDocStatus == "SUCCESS" ||
+                    currentOrderStatus in setOf("CONFIRMED", "PACKING", "SHIPPING", "IN_DELIVERY", "DELIVERED", "COMPLETED")
+                ) {
                     return@runTransaction
                 }
 
@@ -716,6 +808,15 @@ class OrderRepository {
                     } else {
                         val used = (vSnap.getLong("usedCount")?.toInt() ?: 1) - 1
                         transaction.update(voucherRef, "usedCount", used.coerceAtLeast(0))
+                    }
+                    // Xóa bản ghi lịch sử dùng voucher của đơn bị hủy để trả lại hạn mức cá nhân (perUserLimit) cho khách
+                    val orderOwnerId = orderSnap.getString("userId") ?: userId
+                    if (orderOwnerId.isNotBlank() && !voucherId.isNullOrBlank()) {
+                        val usageDocRef = db.collection("users")
+                            .document(orderOwnerId)
+                            .collection("voucherUsages")
+                            .document("usage_${orderId}_${voucherId}")
+                        transaction.delete(usageDocRef)
                     }
                 }
 

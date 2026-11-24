@@ -35,6 +35,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.solesense.data.repository.ProductRepository
+import com.example.solesense.push.PushForegroundTracker
+import com.example.solesense.push.PushNavigationBus
 import com.example.solesense.repository.BrandRepository
 import com.example.solesense.repository.CartRepository
 import com.example.solesense.ui.address.ShippingAddressScreen
@@ -155,6 +157,23 @@ fun MainScreen() {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    // Lắng nghe sự kiện bấm Thông báo màn hình (FCM Deep-Link) cho tác nhân USER (Khách hàng)
+    val pendingPushNav by PushNavigationBus.pendingNavigation.collectAsState()
+    LaunchedEffect(pendingPushNav, sessionState) {
+        val nav = pendingPushNav ?: return@LaunchedEffect
+        val route = nav.deepLinkRoute
+        if (route.startsWith("admin_") || route.startsWith("support_")) return@LaunchedEffect
+        try {
+            navController.navigate(route) {
+                launchSingleTop = true
+            }
+        } catch (_: Exception) {
+            navController.navigate("notifications") { launchSingleTop = true }
+        } finally {
+            PushNavigationBus.consume()
+        }
+    }
 
     val bottomBarRoutes = setOf(
         Screen.Home.route,
@@ -539,6 +558,15 @@ fun AppNavHost(
         }
 
         composable(Screen.Chat.route) {
+            val activeUid = UserSessionManager.getActiveUserId()
+            DisposableEffect(activeUid) {
+                if (!activeUid.isNullOrBlank()) {
+                    PushForegroundTracker.activeChatId = "chat_$activeUid"
+                }
+                onDispose {
+                    PushForegroundTracker.activeChatId = null
+                }
+            }
             LaunchedEffect(Unit) {
                 CartRepository.setUnreadMessageCount(0)
             }

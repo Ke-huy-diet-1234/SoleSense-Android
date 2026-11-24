@@ -1,0 +1,16 @@
+{
+  "name": "solesense-push-relay",
+  "version": "1.0.0",
+  "description": "Free Serverless FCM HTTP v1 Push Relay for SoleSense (Firebase Spark Plan compatible)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "firebase-admin": "^13.0.2"
+  }
+}

@@ -5,6 +5,7 @@ import android.util.Log
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.SvgDecoder
+import com.example.solesense.push.PushNotificationHelper
 import com.example.solesense.utils.DatabaseSeeder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,6 +14,9 @@ import kotlinx.coroutines.launch
 class SoleSenseApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
+        // Khởi tạo toàn bộ 7 NotificationChannel theo 3 tác nhân (User / Support / Admin)
+        PushNotificationHelper.createNotificationChannels(this)
+
         // Tự động kiểm tra phiên bản và đồng bộ danh mục, voucher phong phú lên Firestore
         CoroutineScope(Dispatchers.IO).launch {
             try {

@@ -455,7 +455,7 @@ class CheckoutViewModel : ViewModel() {
                 address.phone.isNotBlank() &&
                 (address.detail.isNotBlank() || address.province.isNotBlank())
 
-        if (!isAddressValid || address == null) {
+        if (!isAddressValid) {
             _uiState.update { it.copy(isAddressSheetVisible = true) }
             onError("Bắt buộc phải nhập đầy đủ Họ tên, Số điện thoại và Địa chỉ nhận hàng trước khi đặt hàng!")
             return

@@ -7,6 +7,8 @@ import com.example.solesense.model.catalog.Variant
 import com.example.solesense.model.chat.Chat
 import com.example.solesense.model.chat.Message
 import com.example.solesense.model.support.SupportRequest
+import com.example.solesense.push.FcmTokenManager
+import com.example.solesense.push.PushDispatchClient
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.ai.ai
@@ -43,35 +45,13 @@ class ChatRepository(
     }
 
     /**
-     * Xóa sạch toàn bộ lịch sử chat và phiếu hỗ trợ cũ (schemaVersion < CURRENT_CHAT_SCHEMA_VERSION)
-     * trên Firestore để làm sạch dữ liệu thử nghiệm từ trước đến nay.
+     * Kiểm tra phiên bản schema hội thoại.
+     * Lưu ý bảo mật & toàn vẹn dữ liệu: Không quét hay xóa toàn bộ collection `chats` / `supportRequests`
+     * của người dùng khác từ phía Client; việc nâng cấp schema chỉ thực hiện cục bộ trên `chat_{userId}`
+     * của chính người dùng đang đăng nhập trong hàm [getOrCreateChat].
      */
     suspend fun ensureCleanHistoryMigration() {
-        if (hasRunLegacyWipeInSession) return
-        try {
-            val allChatsSnap = db.collection("chats").get().await()
-            val legacyChatDocs = allChatsSnap.documents.filter { doc ->
-                (doc.getLong("schemaVersion")?.toInt() ?: 0) < CURRENT_CHAT_SCHEMA_VERSION
-            }
-
-            if (legacyChatDocs.isNotEmpty()) {
-                for (chatDoc in legacyChatDocs) {
-                    val msgsSnap = chatDoc.reference.collection("messages").get().await()
-                    for (msgDoc in msgsSnap.documents) {
-                        msgDoc.reference.delete().await()
-                    }
-                    chatDoc.reference.delete().await()
-                }
-                // Đồng thời dọn sạch toàn bộ phiếu supportRequests cũ liên quan đến lịch sử cũ
-                val allReqsSnap = db.collection("supportRequests").get().await()
-                for (reqDoc in allReqsSnap.documents) {
-                    reqDoc.reference.delete().await()
-                }
-            }
-            hasRunLegacyWipeInSession = true
-        } catch (e: Exception) {
-            Log.w(TAG, "Không thể dọn lịch sử chat cũ: ${e.message}")
-        }
+        hasRunLegacyWipeInSession = true
     }
 
     /**
@@ -193,18 +173,48 @@ class ChatRepository(
             ).await()
 
             // Nếu khách đang ở trạng thái chờ nhân viên (WAITING) và gửi thêm tin nhắn,
-            // cập nhật previewMessage trong supportRequests để nhân viên thấy câu hỏi mới nhất
+            // cập nhật previewMessage trong supportRequests để nhân viên thấy câu hỏi mới nhất.
+            // Nếu đang ở trạng thái ASSIGNED, đẩy Thông báo màn hình đích danh cho nhân viên đang phụ trách!
             if (msgToSave.senderType == "USER") {
                 val chatSnap = chatRef.get().await()
                 val mode = chatSnap.getString("mode") ?: "AI"
                 val status = chatSnap.getString("status") ?: "ACTIVE"
                 val currentReqId = chatSnap.getString("currentRequestId")
+                val assignedStaffId = chatSnap.getString("assignedStaffId")
                 if (mode == "HUMAN" && status == "WAITING" && !currentReqId.isNullOrEmpty()) {
                     try {
                         db.collection("supportRequests").document(currentReqId).update(
                             "previewMessage", msgToSave.content
                         ).await()
                     } catch (_: Exception) {}
+                } else if (mode == "HUMAN" && status == "ASSIGNED" && !assignedStaffId.isNullOrBlank()) {
+                    val senderDisplay = msgToSave.senderName?.ifBlank { "Khách hàng" } ?: "Khách hàng"
+                    PushDispatchClient.pushToUser(
+                        targetUserId = assignedStaffId,
+                        title = "Tin nhắn mới từ $senderDisplay",
+                        body = msgToSave.content,
+                        type = "SUPPORT_CHAT",
+                        targetRole = "SUPPORT",
+                        referenceId = currentReqId,
+                        chatId = chatId,
+                        notificationId = "staff_chat_$messageId"
+                    )
+                }
+            } else if (msgToSave.senderType == "STAFF") {
+                // Nhân viên CSKH trả lời -> Đẩy Thông báo màn hình trực tiếp về máy Khách hàng
+                val customerUid = chatId.removePrefix("chat_")
+                if (customerUid.isNotBlank()) {
+                    val staffDisplay = msgToSave.senderName?.ifBlank { "Chuyên viên SoleSense" } ?: "Chuyên viên SoleSense"
+                    PushDispatchClient.pushToUser(
+                        targetUserId = customerUid,
+                        title = "$staffDisplay đã nhắn tin",
+                        body = msgToSave.content,
+                        type = "CHAT",
+                        targetRole = "CUSTOMER",
+                        referenceId = chatId,
+                        chatId = chatId,
+                        notificationId = "user_chat_$messageId"
+                    )
                 }
             }
 
@@ -1352,6 +1362,18 @@ class ChatRepository(
             )
             sendMessage(chatId, systemMsg)
 
+            // Đẩy Thông báo màn hình tới toàn bộ nhóm Nhân viên CSKH (`role_support`)
+            PushDispatchClient.pushToTopic(
+                topic = FcmTokenManager.TOPIC_ROLE_SUPPORT,
+                title = "Yêu cầu hỗ trợ mới: ${customerName.ifBlank { "Khách hàng" }}",
+                body = previewMessage.ifBlank { "Khách hàng đang chờ nhân viên tiếp nhận tư vấn" },
+                type = "SUPPORT_WAITING",
+                targetRole = "SUPPORT",
+                referenceId = requestId,
+                chatId = chatId,
+                notificationId = "support_wait_$requestId"
+            )
+
             Result.success(requestId)
         } catch (e: Exception) {
             Result.failure(e)
@@ -1508,6 +1530,21 @@ class ChatRepository(
                     createdAt = Timestamp.now()
                 )
                 sendMessage(chatId, sysMsg)
+
+                // Báo về màn hình Khách hàng khi nhân viên đã tiếp nhận phiếu
+                val customerUid = chatId.removePrefix("chat_")
+                if (customerUid.isNotBlank()) {
+                    PushDispatchClient.pushToUser(
+                        targetUserId = customerUid,
+                        title = "Nhân viên đã tiếp nhận hỗ trợ",
+                        body = "Chuyên viên $staffName đã tham gia phòng chat để hỗ trợ bạn.",
+                        type = "CHAT",
+                        targetRole = "CUSTOMER",
+                        referenceId = requestId,
+                        chatId = chatId,
+                        notificationId = "handoff_accepted_$requestId"
+                    )
+                }
             }
 
             Result.success(Unit)
@@ -1555,6 +1592,21 @@ class ChatRepository(
                 createdAt = Timestamp.now()
             )
             sendMessage(chatId, sysMsg)
+
+            // Thông báo về màn hình Khách hàng khi phiên hỗ trợ đã hoàn tất
+            val customerUid = chatId.removePrefix("chat_")
+            if (customerUid.isNotBlank()) {
+                PushDispatchClient.pushToUser(
+                    targetUserId = customerUid,
+                    title = "Phiên hỗ trợ đã hoàn tất",
+                    body = "Chuyên viên SoleSense đã kết thúc phiên hỗ trợ. Bạn có thể đánh giá chất lượng dịch vụ ngay!",
+                    type = "CHAT",
+                    targetRole = "CUSTOMER",
+                    referenceId = requestId,
+                    chatId = chatId,
+                    notificationId = "handoff_resolved_$requestId"
+                )
+            }
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -1677,6 +1729,19 @@ class ChatRepository(
             )
             batch.set(sysMsgRef, sysMsg)
             batch.commit().await()
+
+            // Báo tới toàn bộ nhóm CSKH khi có phiếu được bàn giao về lại hàng chờ
+            PushDispatchClient.pushToTopic(
+                topic = FcmTokenManager.TOPIC_ROLE_SUPPORT,
+                title = "Phiếu hỗ trợ vừa được bàn giao về hàng chờ",
+                body = "Chuyên viên $staffName đã chuyển lại phiếu cho đồng nghiệp tiếp tục hỗ trợ khách hàng.",
+                type = "SUPPORT_WAITING",
+                targetRole = "SUPPORT",
+                referenceId = requestId,
+                chatId = chatId,
+                notificationId = "support_release_$requestId"
+            )
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

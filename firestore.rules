@@ -37,9 +37,13 @@ service cloud.firestore {
         allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       }
 
+      match /favorites/{productId} {
+        allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      }
+
       match /voucherUsages/{usageId} {
         allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-        allow create: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+        allow create, update, delete: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       }
     }
 
@@ -132,14 +136,15 @@ service cloud.firestore {
     }
 
     match /notification_campaigns/{campaignId} {
-      allow read, write: if isAdmin();
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
     // 8. Chats & Support Requests
     match /chats/{chatId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if isSignedIn() && (chatId == ("chat_" + request.auth.uid) || isSupportOrAdmin());
       match /messages/{messageId} {
-        allow read, write: if isSignedIn();
+        allow read, write: if isSignedIn() && (chatId == ("chat_" + request.auth.uid) || isSupportOrAdmin());
       }
     }
 

@@ -214,6 +214,7 @@ class CartRepository {
 
         fun resetBadgeCounts() {
             _distinctCartItemCount.value = 0
+            _unreadMessageCount.value = 0
         }
     }
 }

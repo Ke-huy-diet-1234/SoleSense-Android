@@ -25,6 +25,7 @@ import com.example.solesense.model.support.ReturnRequest
 import com.example.solesense.model.support.Review
 import com.example.solesense.model.user.User
 import com.example.solesense.model.user.toSafeUser
+import com.example.solesense.repository.NotificationRepository
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
@@ -489,13 +490,22 @@ fun AdminCustomerOpsScreen(
                                                 Button(
                                                     onClick = {
                                                         scope.launch {
+                                                            val approvedNote = "Đã duyệt yêu cầu đổi/trả hàng. Nhân viên vận chuyển sẽ liên hệ thu hồi và gửi sản phẩm mới."
                                                             db.collection("returnRequests").document(req.returnId).update(
                                                                 mapOf(
                                                                     "status" to "APPROVED",
-                                                                    "adminNote" to "Đã duyệt yêu cầu đổi/trả hàng. Nhân viên vận chuyển sẽ liên hệ thu hồi và gửi sản phẩm mới.",
+                                                                    "adminNote" to approvedNote,
                                                                     "updatedAt" to Timestamp.now()
                                                                 )
                                                             ).await()
+                                                            NotificationRepository().notifyReturnRequestReviewed(
+                                                                returnId = req.returnId,
+                                                                targetUserId = req.userId,
+                                                                orderId = req.orderId,
+                                                                type = req.type,
+                                                                status = "APPROVED",
+                                                                adminNote = approvedNote
+                                                            )
                                                             Toast.makeText(context, "Đã duyệt yêu cầu Đổi/Trả!", Toast.LENGTH_SHORT).show()
                                                             loadAllOpsData()
                                                         }
@@ -513,13 +523,22 @@ fun AdminCustomerOpsScreen(
                                                 OutlinedButton(
                                                     onClick = {
                                                         scope.launch {
+                                                            val rejectedNote = "Yêu cầu chưa đủ điều kiện đổi trả theo chính sách cửa hàng."
                                                             db.collection("returnRequests").document(req.returnId).update(
                                                                 mapOf(
                                                                     "status" to "REJECTED",
-                                                                    "adminNote" to "Yêu cầu chưa đủ điều kiện đổi trả theo chính sách cửa hàng.",
+                                                                    "adminNote" to rejectedNote,
                                                                     "updatedAt" to Timestamp.now()
                                                                 )
                                                             ).await()
+                                                            NotificationRepository().notifyReturnRequestReviewed(
+                                                                returnId = req.returnId,
+                                                                targetUserId = req.userId,
+                                                                orderId = req.orderId,
+                                                                type = req.type,
+                                                                status = "REJECTED",
+                                                                adminNote = rejectedNote
+                                                            )
                                                             Toast.makeText(context, "Đã từ chối yêu cầu Đổi/Trả", Toast.LENGTH_SHORT).show()
                                                             loadAllOpsData()
                                                         }
@@ -566,12 +585,21 @@ fun AdminCustomerOpsScreen(
                 Button(
                     onClick = {
                         scope.launch {
+                            val cleanReply = storeReplyInput.trim()
                             db.collection("reviews").document(targetRev.reviewId).update(
                                 mapOf(
-                                    "storeReply" to storeReplyInput.trim(),
+                                    "storeReply" to cleanReply,
                                     "updatedAt" to Timestamp.now()
                                 )
                             ).await()
+                            if (cleanReply.isNotBlank()) {
+                                NotificationRepository().notifyStoreRepliedToReview(
+                                    reviewId = targetRev.reviewId,
+                                    targetUserId = targetRev.userId,
+                                    productId = targetRev.productId,
+                                    storeReply = cleanReply
+                                )
+                            }
                             Toast.makeText(context, "Đã lưu phản hồi cửa hàng!", Toast.LENGTH_SHORT).show()
                             replyingToReview = null
                             loadAllOpsData()

@@ -1330,6 +1330,16 @@ fun TrackOrderScreen(
                                     updatedAt = com.google.firebase.Timestamp.now()
                                 )
                                 docRef.set(reqObj).await()
+                                try {
+                                    NotificationRepository().notifyReturnRequestCreated(
+                                        returnId = docRef.id,
+                                        orderId = order.orderId,
+                                        orderCode = order.orderCode,
+                                        type = requestType,
+                                        customerName = order.receiverName.ifBlank { "Khách hàng" },
+                                        reason = selectedReason
+                                    )
+                                } catch (_: Exception) {}
                                 Toast.makeText(
                                     context,
                                     "Đã gửi yêu cầu Đổi/Trả hàng! Nhân viên sẽ phản hồi sớm nhất.",

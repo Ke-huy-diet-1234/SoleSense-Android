@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -6,6 +8,14 @@ plugins {
 
 
 }
+
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val pushRelayUrl = (localProps.getProperty("PUSH_RELAY_URL")
+    ?: (project.findProperty("PUSH_RELAY_URL") as? String)
+    ?: "").trim()
 
 android {
     namespace = "com.example.solesense"
@@ -19,6 +29,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "PUSH_RELAY_URL", "\"$pushRelayUrl\"")
     }
 
     buildTypes {
@@ -36,6 +47,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -59,6 +71,7 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
@@ -67,6 +80,7 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:35.0.2"))
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-messaging")
 
     // Firebase Auth
     implementation("com.google.firebase:firebase-auth")
